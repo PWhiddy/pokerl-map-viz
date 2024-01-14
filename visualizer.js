@@ -8,6 +8,17 @@ const app = new PIXI.Application({
   }
 });
 
+const decompress = async (url) => {
+    const ds = new DecompressionStream("gzip");
+    const response = await fetch(url);
+    const blob_in = await response.blob();
+    const stream_in = blob_in.stream().pipeThrough(ds);
+    const blob_out = await new Response(stream_in).blob();
+    return await blob_out.text();
+};
+
+const tSize = 8192;
+
 const container = new PIXI.Container();
 
 app.stage.addChild(container);
@@ -80,7 +91,8 @@ function getSpriteByCoords(x, y, baseTex) {
 // load the assets and start the scene
 PIXI.Assets.load([
     "kanto_big_done1.png",
-    "characters_transparent.png"
+    "characters_transparent.png",
+    "characters_front.png"
 ]).then(() => {
     // initialize background image
     let baseTexture = new PIXI.BaseTexture("kanto_big_done1.png", {
@@ -98,7 +110,149 @@ PIXI.Assets.load([
         const sprite = new PIXI.Sprite(getSpriteByCoords(x, 0, baseTextureCharacter));
         sprite.x = x * 40; // Adjust position as needed
         sprite.y = 0; // Adjust position as needed
-        container.addChild(sprite);
+        //container.addChild(sprite);
+    });
+
+    // global_coords_64_envs_256_steps_76_games.json.gz 
+    decompress("global_coords_64_envs_2048_steps_76_games.json.gz").then(
+        (data) => {
+            xy_data = JSON.parse(data);
+            const buffDat = new Int16Array(
+                2*tSize*tSize
+            );
+            const xy = xy_data["flat_xy"];
+            for (let i=0; i<xy.length; i++) {
+                buffDat[i] = xy[i];
+            }
+            const dataTexture = PIXI.Texture.fromBuffer(buffDat, tSize, tSize, {
+                format: PIXI.FORMATS.RG_INTEGER, // format for 16-bit integer data
+                type: PIXI.TYPES.SHORT, // Specify the data type as short
+            });
+
+            dataTexture.baseTexture.mipmap = PIXI.MIPMAP_MODES.OFF;
+
+            // Vertex Shader
+            const vertexShader = `
+#version 300 es
+precision mediump float;
+precision highp int;
+
+in vec2 aVertexPosition; // Vertex position attribute
+in vec2 aTextureCoord;
+in float aInstanceId; // Instance ID attribute
+uniform mat3 translationMatrix;
+uniform mat3 projectionMatrix;
+uniform highp isampler2D uOffsetTexture;
+uniform float uTimestep;
+uniform int uInstanceCount;
+uniform float uStepsPerGame;
+uniform float uNumEnvs;
+uniform float uGameCount;
+uniform float uTextureSize;
+
+out vec2 vTextureCoord; // Pass texture coordinates to the fragment shader
+out float fsInstanceID;
+
+vec2 fetchOffset(float instanceId, int timestep) {
+    float gameBatch = floor(aInstanceId / uNumEnvs);
+    float batchOffset = uStepsPerGame * uNumEnvs * gameBatch;
+    float envId = mod(aInstanceId, uNumEnvs);
+    float index = batchOffset + float(timestep) * uNumEnvs + envId;
+    float x = mod(index, uTextureSize);
+    float y = floor(index / uTextureSize);
+    ivec2 texCoord = ivec2(x, y);
+    ivec4 offsetData = texelFetch(uOffsetTexture, texCoord, 0);
+    return vec2(offsetData.gr)-vec2(217.5,221.5); // Convert 16-bit ints to float
+}
+
+void main() {
+    float fr = fract(uTimestep);
+    vec2 curOffset = 16.0*fetchOffset(aInstanceId, int(floor(uTimestep)));
+    vec2 nextOffset = 16.0*fetchOffset(aInstanceId, int(floor(uTimestep))+1);
+    // TODO fix this interpolation! maybe check the data env order isn't scrambled.
+    vec2 offset = mix(curOffset, nextOffset, 0.0); // fr
+    
+    vec3 position = vec3(aVertexPosition + offset, 1.0);
+    gl_Position = vec4((projectionMatrix * translationMatrix * position).xy, 0.0, 1.0);
+    vTextureCoord = aTextureCoord; // Assuming you need texture coordinates in the fragment shader
+    fsInstanceID = aInstanceId;
+}            
+                `;
+
+            // Fragment Shader
+            const fragmentShader = `
+#version 300 es
+precision mediump float;
+precision highp int;
+
+uniform vec4 uColor;
+uniform float uTimestep;
+uniform highp isampler2D uOffsetTexture;
+uniform sampler2D uSpriteDownTexture;
+in vec2 vTextureCoord; // Texture coordinates from the vertex shader
+in float fsInstanceID;
+out vec4 outColor; // Output color
+
+void main() {
+    // Simple example: color the fragment based on the uniform uColor
+    outColor = texture(uSpriteDownTexture, vTextureCoord);//uColor;
+}
+                `;
+            let currentTimestep = 0;
+            const instanceCount = xy_data["envs"] * xy_data["games"];
+            const uniforms = {
+                uColor: [1, 0, 0, 1], // Example color
+                uOffsetTexture: dataTexture,
+                uSpriteDownTexture: new PIXI.Texture(
+                    new PIXI.BaseTexture(
+                        "characters_front.png",
+                        {mipmap: PIXI.MIPMAP_MODES.ON}
+                        )
+                    ),
+                uTimestep: currentTimestep,
+                uTextureSize: tSize,
+                uInstanceCount: instanceCount,
+                uStepsPerGame: xy_data["steps"],
+                uNumEnvs: xy_data["envs"],
+                uGameCount: xy_data["games"]
+            };
+            // Instance ID attribute
+            let instanceIds = new Float32Array(instanceCount);
+            for (let i = 0; i < instanceCount; i++) {
+                instanceIds[i] = i;
+            }
+            
+            const geometry = new PIXI.Geometry()
+                .addAttribute('aVertexPosition', [
+                    -8, -8, // First triangle
+                    8, -8,
+                    -8,  8,
+                    -8,  8, // Second triangle
+                    8, -8,
+                    8,  8
+                ], 2)
+                .addAttribute('aTextureCoord', [
+                    0, 0, // First triangle
+                    1, 0,
+                    0, 1,
+                    0, 1, // Second triangle
+                    1, 0,
+                    1, 1
+                ], 2) // Quad vertices for a sprite
+                .addAttribute('aInstanceId', instanceIds, 1, false, PIXI.TYPES.FLOAT, 0, 0, true);
+            
+            geometry.instanced = true;
+            geometry.instanceCount = instanceCount;
+
+            const shader = PIXI.Shader.from(vertexShader, fragmentShader, uniforms);
+            const mesh = new PIXI.Mesh(geometry, shader);
+            mesh.eventMode = "none";
+            container.addChild(mesh);
+
+            app.ticker.add((delta) => {
+                shader.uniforms.uTimestep = currentTimestep % xy_data["steps"];
+                currentTimestep += 0.2;
+            });
     });
 
 });
