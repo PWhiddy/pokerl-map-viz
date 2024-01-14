@@ -1,6 +1,7 @@
 // Create a PixiJS application
 const app = new PIXI.Application({
   resizeTo: window,
+  eventMode: "static",
   eventFeatures: {
         wheel: true,
         mouse: true,
@@ -14,17 +15,7 @@ app.stage.addChild(container);
 // add the view that Pixi created for you to the DOM
 document.body.appendChild(app.view);
 
-const interactionManager = app.interaction;
-//console.log(app.renderer);
-
-
 const zoomSpeed = 0.004;
-/*
-window.addEventListener('wheel', (e) => {
-    container.scale.x *= 1.0 - (e.deltaY * zoomSpeed);
-    container.scale.y *= 1.0 - (e.deltaY * zoomSpeed);
-});
-*/
 
 app.view.addEventListener('wheel', (e) => {
     e.preventDefault();
@@ -53,7 +44,6 @@ let dragging = false;
 let dragStart = { x: 0, y: 0 };
 let dragOffset = { x: 0, y: 0 };
 
-container.interactive = true;
 container.on('mousedown', (event) => {
     dragging = true;
     // Get the position of the mouse relative to the container's position
@@ -78,12 +68,21 @@ container.on('mousedown', (event) => {
     }
 });
 
+function getSpriteByCoords(x, y, baseTex) {
+    const sx = 9 + 17 * x;
+    const sy = 34 + 17 * y;
+    const width = 16;
+    const height = 16;
+
+    return new PIXI.Texture(baseTex, new PIXI.Rectangle(sx, sy, width, height));
+}
+
 // load the assets and start the scene
 PIXI.Assets.load([
-    "kanto_big_done1.png"
+    "kanto_big_done1.png",
+    "characters_transparent.png"
 ]).then(() => {
     // initialize background image
-    //const background = PIXI.Sprite.from("kanto_big_done1.png");
     let baseTexture = new PIXI.BaseTexture("kanto_big_done1.png", {
       mipmap: PIXI.MIPMAP_MODES.ON
     });
@@ -92,7 +91,14 @@ PIXI.Assets.load([
     background.anchor.set(0.5);
     container.addChild(background);
 
-    // scale stage container to match the background size
-    //app.stage.scale.x = app.view.width / background.width;
-    //app.stage.scale.y = app.view.height / background.height;
+    const baseTextureCharacter = new PIXI.BaseTexture(
+        "characters_transparent.png",
+        {mipmap: PIXI.MIPMAP_MODES.ON});
+    [1, 4, 6, 8].forEach(x => {
+        const sprite = new PIXI.Sprite(getSpriteByCoords(x, 0, baseTextureCharacter));
+        sprite.x = x * 40; // Adjust position as needed
+        sprite.y = 0; // Adjust position as needed
+        container.addChild(sprite);
+    });
+
 });
