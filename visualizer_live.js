@@ -10,7 +10,7 @@ const app = new PIXI.Application({
 
 const socket = new WebSocket('wss://poke-ws-test-ulsjzjzwpa-ue.a.run.app/receive');
 
-const T = 4000;
+const T = 12000;
 
 const container = new PIXI.Container();
 
