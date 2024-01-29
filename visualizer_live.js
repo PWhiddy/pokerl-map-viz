@@ -19,11 +19,11 @@ app.stage.addChild(container);
 // add the view that Pixi created for you to the DOM
 document.body.appendChild(app.view);
 
-const zoomSpeed = 0.004;
+const zoomSpeed = 0.002;
 
 app.view.addEventListener('wheel', (e) => {
     e.preventDefault();
-    const scaleFactor = 1.0 + (e.deltaY * zoomSpeed);
+    const scaleFactor = 1.0 - (e.deltaY * zoomSpeed);
 
     // Get the mouse position relative to the canvas
     const rect = app.view.getBoundingClientRect();
