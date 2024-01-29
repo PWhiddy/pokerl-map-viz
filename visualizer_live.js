@@ -121,7 +121,7 @@ PIXI.Assets.load([
         const data = JSON.parse(event.data); // Assuming the data is JSON-encoded
         const path = data["coords"];
         const meta = data["metadata"];
-        console.log(meta);
+        //console.log(meta);
         startAnimationForPath(path, meta);
     };
 
