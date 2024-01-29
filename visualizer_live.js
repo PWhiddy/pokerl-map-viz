@@ -14,6 +14,17 @@ let socket = null;
 const T = 12000;
 
 const container = new PIXI.Container();
+// scale and center container initially
+const renderWidth = window.innerWidth; // or the width of your specific rendering area
+const renderHeight = window.innerHeight; // or the height of your specific rendering area
+const desiredCenterX = renderWidth / 2;
+const desiredCenterY = renderHeight / 2;
+container.x = desiredCenterX;
+container.y = desiredCenterY;
+container.pivot.x = container.width / 2;
+container.pivot.y = container.height / 2;
+container.scale.set(0.1, 0.1);
+
 
 app.stage.addChild(container);
 
