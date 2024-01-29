@@ -31,7 +31,7 @@ app.stage.addChild(container);
 // add the view that Pixi created for you to the DOM
 document.body.appendChild(app.view);
 
-const zoomSpeed = 0.002;
+const zoomSpeed = 0.0015;
 
 app.view.addEventListener('wheel', (e) => {
     e.preventDefault();
