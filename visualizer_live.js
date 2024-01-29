@@ -8,8 +8,9 @@ const app = new PIXI.Application({
   }
 });
 
-const socket = new WebSocket('wss://poke-ws-test-ulsjzjzwpa-ue.a.run.app/receive');
+let socket = null;
 
+// animate each batch of updates for 12 seconds
 const T = 12000;
 
 const container = new PIXI.Container();
@@ -117,13 +118,27 @@ PIXI.Assets.load([
     background.anchor.set(0.5);
     container.addChild(background);
 
-    socket.onmessage = function(event) {
-        const data = JSON.parse(event.data); // Assuming the data is JSON-encoded
-        const path = data["coords"];
-        const meta = data["metadata"];
-        console.log(meta);
-        startAnimationForPath(path, meta);
-    };
+        // Function to initialize WebSocket connection
+    function initializeWebSocket() {
+        const ws = new WebSocket('wss://poke-ws-test-ulsjzjzwpa-ue.a.run.app/receive');
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data); // Assuming the data is JSON-encoded
+            const path = data["coords"];
+            const meta = data["metadata"];
+            console.log(meta);
+            startAnimationForPath(path, meta);
+        };
+        return ws;
+    }
+
+    socket = initializeWebSocket();
+
+    // Refresh WebSocket connection every 2 minutes (120000 milliseconds)
+    setInterval(() => {
+        console.log("Refreshing WebSocket connection.");
+        socket.close(); // Close the current connection
+        socket = initializeWebSocket(); // Reinitialize the connection
+    }, 120000);
 
     let baseTextureChar = new PIXI.BaseTexture("characters_transparent.png", {
         // mipmap: PIXI.MIPMAP_MODES.ON
