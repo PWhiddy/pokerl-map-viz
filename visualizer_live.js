@@ -8,7 +8,7 @@ const app = new PIXI.Application({
   }
 });
 
-const socket = new WebSocket('ws://poke-ws-test-ulsjzjzwpa-ue.a.run.app/receive');
+const socket = new WebSocket('wss://poke-ws-test-ulsjzjzwpa-ue.a.run.app/receive');
 
 const T = 4000;
 
