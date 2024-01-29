@@ -251,7 +251,7 @@ void main() {
 
             app.ticker.add((delta) => {
                 shader.uniforms.uTimestep = currentTimestep % xy_data["steps"];
-                currentTimestep += 0.2;
+                currentTimestep += 0.08;
             });
     });
 
