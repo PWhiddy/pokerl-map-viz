@@ -147,9 +147,10 @@ PIXI.Assets.load([
         if (meta && meta.user !== undefined && typeof(meta.user) === "string") {
             // Create a text label
             const envID = meta.env_id !== undefined ? `-${meta.env_id}` : "";
+            const extraInfo = meta.extra !== undefined ? ` ${meta.extra}` : "";
             const color = (meta.color && CSS.supports('color', meta.color)) ? meta.color : "0x000000";
             const label = new PIXI.Text(
-                meta.user + envID, 
+                meta.user + envID + extraInfo, 
                 {
                     fontFamily: 'Arial',
                     fontSize: 14,
