@@ -5,7 +5,7 @@ Stream multiple games of pokemon onto a shared map
 </a>
 
 ## To broadcast:
-Use the follow gym environment wrapper:
+Use the StreamWrapper gym environment wrapper:
 https://github.com/PWhiddy/PokemonRedExperiments/blob/master/baselines/stream_agent_wrapper.py
 And wrap your environment like this:
 ```python
