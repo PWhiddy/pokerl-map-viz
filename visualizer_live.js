@@ -13,11 +13,13 @@ const app = new PIXI.Application({
 
 let socket = null;
 
+let lastFrameTime = Date.now();
+
 let backgroundSharp = null;
 let backgroundSmooth = null;
 
 // animate each batch of updates for 12 seconds
-const T = 12000;
+const animationDuration = 12000;
 
 const container = new PIXI.Container();
 // scale and center container initially
@@ -163,7 +165,9 @@ PIXI.Assets.load([
             const path = data["coords"];
             const meta = data["metadata"];
             console.log(meta);
-            startAnimationForPath(path, meta);
+            if (Date.now() - lastFrameTime < animationDuration) {
+                startAnimationForPath(path, meta);
+            }
         };
         return ws;
     }
@@ -223,7 +227,7 @@ PIXI.Assets.load([
         activeSprites.forEach(obj => {
             if (!obj.startTime) obj.startTime = time;
             const timeDelta = time - obj.startTime;
-            const progress = Math.min(timeDelta / T, 1);
+            const progress = Math.min(timeDelta / animationDuration, 1);
 
             // Calculate the current position
             const currentIndex = Math.floor(progress * (obj.path.length - 1));
@@ -243,8 +247,8 @@ PIXI.Assets.load([
         });
 
         // Remove sprites that have completed their animation
-        activeSprites = activeSprites.filter(obj => (time - obj.startTime) < T);
-
+        activeSprites = activeSprites.filter(obj => (time - obj.startTime) < animationDuration);
+        lastFrameTime = Date.now();
         requestAnimationFrame(animate);
     }
 
