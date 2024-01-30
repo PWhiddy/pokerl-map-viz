@@ -1,3 +1,6 @@
+// Enables point filtering
+PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
+
 // Create a PixiJS application
 const app = new PIXI.Application({
   resizeTo: window,
