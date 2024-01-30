@@ -177,7 +177,7 @@ PIXI.Assets.load([
         socket = initializeWebSocket(); // Reinitialize the connection
     }, 120000);
 
-    let baseTextureChar = new PIXI.BaseTexture("characters_transparent.png", {
+    let baseTextureChar = new PIXI.BaseTexture("assets/characters_transparent.png", {
         // mipmap: PIXI.MIPMAP_MODES.ON
     });
 
