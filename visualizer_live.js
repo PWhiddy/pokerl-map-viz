@@ -41,6 +41,11 @@ document.body.appendChild(app.view);
 
 const zoomSpeed = 0.0015;
 
+function smoothstep(min, max, value) {
+    const x = Math.max(0, Math.min(1, (value-min)/(max-min)));
+    return x*x*(3 - 2*x);
+}
+
 app.view.addEventListener('wheel', (e) => {
     e.preventDefault();
     const scaleFactor = 1.0 - (e.deltaY * zoomSpeed);
@@ -59,13 +64,12 @@ app.view.addEventListener('wheel', (e) => {
     container.scale.y *= scaleFactor;
 
     if (backgroundSmooth && backgroundSharp) {
-        if (container.scale.x < 2.0) {
-            backgroundSmooth.visible = true;
-            backgroundSharp.visible = false;
-        } else if (container.scale.x > 2.0) {     
-            backgroundSmooth.visible = false;
-            backgroundSharp.visible = true;
-        }
+        const val = container.scale.x;
+        const start = 2;
+        const end = 4.5;
+        const smooth = smoothstep(start, end, val);
+        backgroundSharp.alpha = Math.pow(smooth, 0.3);
+        backgroundSmooth.alpha = Math.pow(1.0 - smooth, 0.3);
     }
 
     // Calculate the new position of the point
@@ -152,7 +156,7 @@ PIXI.Assets.load([
     let textureSharp = new PIXI.Texture(baseTextureSharp);
     backgroundSharp = new PIXI.Sprite(textureSharp);
     backgroundSharp.anchor.set(0.5);
-    backgroundSharp.visible = false;
+    backgroundSharp.alpha = 0.0;
 
     container.addChild(backgroundSmooth);
     container.addChild(backgroundSharp);
@@ -165,7 +169,7 @@ PIXI.Assets.load([
             const path = data["coords"];
             const meta = data["metadata"];
             console.log(meta);
-            if (Date.now() - lastFrameTime < animationDuration) {
+            if (Date.now() - lastFrameTime < 2 * animationDuration) {
                 startAnimationForPath(path, meta);
             }
         };
@@ -182,7 +186,7 @@ PIXI.Assets.load([
     }, 120000);
 
     let baseTextureChar = new PIXI.BaseTexture("assets/characters_transparent.png", {
-        // mipmap: PIXI.MIPMAP_MODES.ON
+        scaleMode: PIXI.SCALE_MODES.NEAREST,
     });
 
     const charOffset = 1; // 1 index here gets sprite direction index
