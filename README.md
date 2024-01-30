@@ -21,4 +21,4 @@ env = StreamWrapper(
 ```
 
 ### Credits
-Death Strike Game - created the complete map!
+@ Death Strike Gaming - created the complete map!
