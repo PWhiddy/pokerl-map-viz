@@ -1,5 +1,5 @@
 // Enables point filtering
-PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
+//PIXI.settings.SCALE_MODE = PIXI.SCALE_MODES.NEAREST;
 
 // Create a PixiJS application
 const app = new PIXI.Application({
@@ -12,6 +12,9 @@ const app = new PIXI.Application({
 });
 
 let socket = null;
+
+let backgroundSharp = null;
+let backgroundSmooth = null;
 
 // animate each batch of updates for 12 seconds
 const T = 12000;
@@ -53,6 +56,16 @@ app.view.addEventListener('wheel', (e) => {
     container.scale.x *= scaleFactor;
     container.scale.y *= scaleFactor;
 
+    if (backgroundSmooth && backgroundSharp) {
+        if (container.scale.x < 2.0) {
+            backgroundSmooth.visible = true;
+            backgroundSharp.visible = false;
+        } else if (container.scale.x > 2.0) {     
+            backgroundSmooth.visible = false;
+            backgroundSharp.visible = true;
+        }
+    }
+
     // Calculate the new position of the point
     const newPoint = container.toGlobal(localPoint);
     container.x -= (newPoint.x - point.x);
@@ -90,7 +103,7 @@ container.on('mousedown', (event) => {
 
 let coordConversionFunc = (coords) => [0,0];
 
-fetch('map_data.json')
+fetch('assets/map_data.json')
     .then(response => response.json())
     .then(data => {
         MAP_DATA = data.regions.reduce((acc, e) => {
@@ -119,18 +132,28 @@ function getSpriteByCoords(x, y, baseTex) {
    // "characters_front.png"
 
 PIXI.Assets.load([
-    "kanto_big_done1.png",
-    "characters_transparent.png",
-    "characters_front.png"
+    "assets/kanto_big_done1.png",
+    "assets/characters_transparent.png",
+    "assets/characters_front.png"
 ]).then(() => {
 
-    let baseTexture = new PIXI.BaseTexture("kanto_big_done1.png", {
-        mipmap: PIXI.MIPMAP_MODES.ON
+    let baseTextureSmooth = new PIXI.BaseTexture("assets/kanto_big_done1.png", {
+        mipmap: PIXI.MIPMAP_MODES.ON, scaleMode: PIXI.SCALE_MODES.LINEAR,
     });
-    let texture = new PIXI.Texture(baseTexture);
-    let background = new PIXI.Sprite(texture);
-    background.anchor.set(0.5);
-    container.addChild(background);
+    let textureSmooth = new PIXI.Texture(baseTextureSmooth);
+    backgroundSmooth = new PIXI.Sprite(textureSmooth);
+    backgroundSmooth.anchor.set(0.5);
+
+    let baseTextureSharp = new PIXI.BaseTexture("assets/kanto_big_done1.png", {
+        scaleMode: PIXI.SCALE_MODES.NEAREST,
+    });
+    let textureSharp = new PIXI.Texture(baseTextureSharp);
+    backgroundSharp = new PIXI.Sprite(textureSharp);
+    backgroundSharp.anchor.set(0.5);
+    backgroundSharp.visible = false;
+
+    container.addChild(backgroundSmooth);
+    container.addChild(backgroundSharp);
 
         // Function to initialize WebSocket connection
     function initializeWebSocket() {

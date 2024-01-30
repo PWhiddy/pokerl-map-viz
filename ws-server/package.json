@@ -2,9 +2,9 @@
   "name": "pokerl-map-viz",
   "version": "1.0.0",
   "description": "",
-  "main": "pass_training_stream.js",
+  "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index"
   },
   "author": "",
   "license": "ISC",
