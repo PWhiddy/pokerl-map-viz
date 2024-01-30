@@ -201,6 +201,9 @@ PIXI.Assets.load([
 
         // Check if meta is defined and has a 'user' key
         if (meta && meta.user !== undefined && typeof(meta.user) === "string") {
+            
+            meta.user = meta.user.split("\n")[0]; // Only use the first line of the username to save my eyeballs
+
             // Create a text label
             const envID = meta.env_id !== undefined ? `-${meta.env_id}` : "";
             const extraInfo = meta.extra !== undefined ? ` ${meta.extra}` : "";
