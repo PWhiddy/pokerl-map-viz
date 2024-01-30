@@ -1,4 +1,4 @@
-## Multiplayer Pokemon Streaming - 🎦 🔴 [View Here](pwhiddy.github.io/pokerl-map-viz/)
+## Multiplayer Pokemon Streaming - 🎦 🔴 [View Here](https://pwhiddy.github.io/pokerl-map-viz/)
 
 Stream multiple games of pokemon onto a shared map!  
   
