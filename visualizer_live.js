@@ -191,20 +191,24 @@ PIXI.Assets.load([
     let activeSprites = [];
 
     function startAnimationForPath(path, meta) {
-        const sprite = new PIXI.Sprite(textureChar);
-        //sprite.x = charOffset * 40; 
-        sprite.anchor.set(0.5);
-        //sprite.scale.set(0.5); // Adjust scale as needed
-        const subContainer = new PIXI.Container();
 
-        subContainer.addChild(sprite);
+        const filterUser = document.getElementById("hlname").value; // highlight user
+        const onlyUser = document.getElementById("onlyuser").checked !== undefined ? document.getElementById("onlyuser").checked : false; // only show user
+        const usermatch = filterUser !== "" && meta && meta.user && meta.user.toLowerCase().includes(filterUser.toLowerCase());
 
         // Check if meta is defined and has a 'user' key
         if (meta && meta.user !== undefined && typeof(meta.user) === "string") {
 
-            meta.user = meta.user.replace(/[^a-zA-Z0-9]/g, ''); // remove non-alphanumeric characters
-            const usermatch = meta.user === document.getElementById("hlname").value; // highlight user
+            if (onlyUser && !usermatch) return;
 
+            const sprite = new PIXI.Sprite(textureChar);
+            //sprite.x = charOffset * 40; 
+            sprite.anchor.set(0.5);
+            //sprite.scale.set(0.5); // Adjust scale as needed
+            const subContainer = new PIXI.Container();
+    
+            subContainer.addChild(sprite);
+           
             // Create a text label
             const envID = meta.env_id !== undefined ? `-${meta.env_id}` : "";
             const extraInfo = meta.extra !== undefined ? ` ${meta.extra}` : "";
@@ -213,18 +217,20 @@ PIXI.Assets.load([
                 meta.user + envID + extraInfo, 
                 {
                     fontFamily: 'Arial',
-                    fontSize: usermatch === true ? 128 : 16,
+                    fontSize: usermatch === true ? 128 : 14,
                     fill: color,
                     align: 'center',
             });
             label.x = sprite.x + sprite.width * 0.5; // Position the label next to the sprite
             label.y -= sprite.height; // Adjust the label position as needed
             subContainer.addChild(label);
+
+            container.addChild(subContainer);
+            activeSprites.push({ subContainer, path, startTime: null });
+
         }
 
-        container.addChild(subContainer);
 
-        activeSprites.push({ subContainer, path, startTime: null });
     }
 
     function animate(time) {
