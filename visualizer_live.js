@@ -33,6 +33,7 @@ container.pivot.x = container.width / 2;
 container.pivot.y = container.height / 2;
 container.scale.set(0.1, 0.1);
 
+const highlight_container = new PIXI.Container();
 highlight_container.x = 0;
 
 
