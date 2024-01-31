@@ -201,7 +201,8 @@ PIXI.Assets.load([
 
         // Check if meta is defined and has a 'user' key
         if (meta && meta.user !== undefined && typeof(meta.user) === "string") {
-            
+
+            meta.user = meta.user.replace(/[^a-zA-Z0-9]/g, ''); // remove non-alphanumeric characters
             const usermatch = meta.user === document.getElementById("hlname").value; // highlight user
 
             // Create a text label
