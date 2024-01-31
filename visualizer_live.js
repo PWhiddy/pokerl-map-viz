@@ -33,8 +33,18 @@ container.pivot.x = container.width / 2;
 container.pivot.y = container.height / 2;
 container.scale.set(0.1, 0.1);
 
+highlight_container.x = 0;
+
+
+const bg = new PIXI.Sprite(PIXI.Texture.WHITE);
+bg.width = 400;
+bg.height = innerHeight;
+bg.tint = 0x888888;
+highlight_container.addChild(bg);
+
 
 app.stage.addChild(container);
+app.stage.addChild(highlight_container);
 
 // add the view that Pixi created for you to the DOM
 document.body.appendChild(app.view);
@@ -167,6 +177,7 @@ PIXI.Assets.load([
             console.log(meta);
             if (Date.now() - lastFrameTime < animationDuration) {
                 startAnimationForPath(path, meta);
+                startTextAnimation(meta);
             }
         };
         return ws;
@@ -189,12 +200,38 @@ PIXI.Assets.load([
     let textureChar = getSpriteByCoords(charOffset, 0, baseTextureChar);
 
     let activeSprites = [];
+    let activeHighlights = [];
+
+    function startTextAnimation(meta) {
+
+        if (meta && meta.user !== undefined && typeof(meta.user) === "string") {
+
+            const text = meta.highlights !== undefined ? meta.highlights : "";
+            if (text === "") return;
+
+            const highlightlabel = new PIXI.Text(meta.user + ":" + text, {
+                fontFamily: 'Arial',
+                fontSize: 20,
+                fill: 0xffffff,
+                align: 'center',
+            });
+
+            activeHighlights.push({ highlightlabel, startTime: null });
+            highlight_container.addChild(highlightlabel);
+
+        }
+    }
+
 
     function startAnimationForPath(path, meta) {
 
         const filterUser = document.getElementById("hlname").value; // highlight user
         const onlyUser = document.getElementById("onlyuser").checked !== undefined ? document.getElementById("onlyuser").checked : false; // only show user
         const usermatch = filterUser !== "" && meta && meta.user && meta.user.toLowerCase().includes(filterUser.toLowerCase());
+
+        const pathLength = path.length;
+
+        if (pathLength == 0) return;
 
         // Check if meta is defined and has a 'user' key
         if (meta && meta.user !== undefined && typeof(meta.user) === "string") {
@@ -228,6 +265,8 @@ PIXI.Assets.load([
             container.addChild(subContainer);
             activeSprites.push({ subContainer, path, startTime: null });
 
+
+
         }
 
 
@@ -256,8 +295,23 @@ PIXI.Assets.load([
 
         });
 
+        activeHighlights.forEach(obj => {
+            if (!obj.startTime) obj.startTime = time;
+            const timeDelta = time - obj.startTime;
+            const progress = Math.min(timeDelta / animationDuration, 1);
+
+            obj.highlightlabel.y = window.innerHeight * progress;
+
+            if (progress >= 1) {
+                highlight_container.removeChild(obj.highlightlabel); // Remove sprite from the scene
+                obj.highlightlabel.destroy({ children: true }); // Optional: frees up memory used by the sprite
+            }
+        })
+
+
         // Remove sprites that have completed their animation
         activeSprites = activeSprites.filter(obj => (time - obj.startTime) < animationDuration);
+        activeHighlights = activeHighlights.filter(obj => (time - obj.startTime) < animationDuration);
         lastFrameTime = Date.now();
         requestAnimationFrame(animate);
     }
