@@ -11,6 +11,8 @@ const app = new PIXI.Application({
   }
 });
 
+globalThis.__PIXI_APP__ = app; // for debugging and dev
+
 let socket = null;
 
 let lastFrameTime = Date.now();
@@ -202,7 +204,8 @@ PIXI.Assets.load([
         // Check if meta is defined and has a 'user' key
         if (meta && meta.user !== undefined && typeof(meta.user) === "string") {
             
-            meta.user = meta.user.split("\n")[0]; // Only use the first line of the username to save my eyeballs
+            const usermatch = meta.user === document.getElementById("hlname").value; // Only use the first line of the username to save my eyeballs
+            console.log(usermatch);
 
             // Create a text label
             const envID = meta.env_id !== undefined ? `-${meta.env_id}` : "";
@@ -212,7 +215,7 @@ PIXI.Assets.load([
                 meta.user + envID + extraInfo, 
                 {
                     fontFamily: 'Arial',
-                    fontSize: 14,
+                    fontSize: usermatch === true ? 128 : 16,
                     fill: color,
                     align: 'center',
             });
