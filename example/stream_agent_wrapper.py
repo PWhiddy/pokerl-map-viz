@@ -5,7 +5,6 @@ import gymnasium as gym
 
 X_POS_ADDRESS, Y_POS_ADDRESS = 0xD362, 0xD361 # Memory Addresses for X and Y position in Pokemon Gen 1 games
 MAP_N_ADDRESS = 0xD35E # Memory Address for map number in Pokemon Gen 1 games
-IN_BATTLE_ADDRESS = 0xD057 # Memory Address for in battle flag in Pokemon Gen 1 games
 
 class StreamWrapper(gym.Wrapper):
     def __init__(self, env, stream_metadata={}):
@@ -18,7 +17,7 @@ class StreamWrapper(gym.Wrapper):
                 self.establish_wc_connection()
         )
         self.upload_interval = 200 # How many steps between each upload
-        self.steam_step_counter = 0
+        self.stream_step_counter = 0
         self.coord_list = []
         if hasattr(env, "pyboy"):
             self.emulator = env.pyboy
@@ -34,8 +33,7 @@ class StreamWrapper(gym.Wrapper):
         map_n = self.emulator.get_memory_value(MAP_N_ADDRESS)
         self.coord_list.append([x_pos, y_pos, map_n])
 
-        if self.steam_step_counter >= self.upload_interval:
-            self.stream_metadata["extra"] = f"lvls: {self.get_levels_sum()}"
+        if self.stream_step_counter >= self.upload_interval:
             self.loop.run_until_complete(
                 self.broadcast_ws_message(
                     json.dumps(
@@ -46,7 +44,7 @@ class StreamWrapper(gym.Wrapper):
                     )
                 )
             )
-            self.steam_step_counter = 0
+            self.stream_step_counter = 0
             self.coord_list = []
 
         self.steam_step_counter += 1
