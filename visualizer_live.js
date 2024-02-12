@@ -11,6 +11,7 @@ const app = new PIXI.Application({
   }
 });
 
+let socketOld = null;
 let socket = null;
 
 let lastFrameTime = Date.now();
@@ -162,8 +163,8 @@ PIXI.Assets.load([
     container.addChild(backgroundSharp);
 
         // Function to initialize WebSocket connection
-    function initializeWebSocket() {
-        const ws = new WebSocket('wss://poke-ws-test-ulsjzjzwpa-ue.a.run.app/receive');
+    function initializeWebSocket(url) {
+        const ws = new WebSocket(url);
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data); // Assuming the data is JSON-encoded
             const path = data["coords"];
@@ -176,14 +177,22 @@ PIXI.Assets.load([
         return ws;
     }
 
-    socket = initializeWebSocket();
+    const refreshWS = () => {
+        console.log("Refreshing WebSocket connection.");
+        if (socketOld !== null) {
+            socketOld.close(); // Close the current connection
+        }
+        socketOld = initializeWebSocket("wss://poke-ws-test-ulsjzjzwpa-ue.a.run.app/receive"); // Reinitialize the connection
+        if (socket !== null) {
+            socket.close(); // Close the current connection
+        }
+        socket = initializeWebSocket("wss://transdimensional.xyz/receive");
+    };
+
+    refreshWS();
 
     // Refresh WebSocket connection every 2 minutes (120000 milliseconds)
-    setInterval(() => {
-        console.log("Refreshing WebSocket connection.");
-        socket.close(); // Close the current connection
-        socket = initializeWebSocket(); // Reinitialize the connection
-    }, 120000);
+    setInterval(refreshWS, 120000);
 
     let baseTextureChar = new PIXI.BaseTexture("assets/characters_transparent.png", {
         scaleMode: PIXI.SCALE_MODES.NEAREST,
