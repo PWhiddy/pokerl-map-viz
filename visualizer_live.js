@@ -11,7 +11,6 @@ const app = new PIXI.Application({
   }
 });
 
-let socketOld = null;
 let socket = null;
 
 let lastFrameTime = Date.now();
@@ -179,10 +178,7 @@ PIXI.Assets.load([
 
     const refreshWS = () => {
         console.log("Refreshing WebSocket connection.");
-        if (socketOld !== null) {
-            socketOld.close(); // Close the current connection
-        }
-        socketOld = initializeWebSocket("wss://poke-ws-test-ulsjzjzwpa-ue.a.run.app/receive"); // Reinitialize the connection
+        // Reinitialize the connection
         if (socket !== null) {
             socket.close(); // Close the current connection
         }
