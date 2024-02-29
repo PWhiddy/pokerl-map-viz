@@ -46,6 +46,17 @@ function smoothstep(min, max, value) {
     return x*x*(3 - 2*x);
 }
 
+let userFilter = new RegExp("");
+let activeSprites = [];
+function setUserFilter(value) {
+    userFilter = new RegExp(value);
+    activeSprites.forEach(obj => {
+        container.removeChild(obj.subContainer); // Remove sprite from the scene
+        obj.subContainer.destroy({ children: true }); // Optional: frees up memory used by the sprite
+    });
+    activeSprites = []
+}
+
 app.view.addEventListener('wheel', (e) => {
     e.preventDefault();
     const scaleFactor = 1.0 - (e.deltaY * zoomSpeed);
@@ -196,16 +207,8 @@ PIXI.Assets.load([
     const charOffset = 1; // 1 index here gets sprite direction index
     let textureChar = getSpriteByCoords(charOffset, 0, baseTextureChar);
 
-    let activeSprites = [];
 
     function startAnimationForPath(path, meta) {
-        const sprite = new PIXI.Sprite(textureChar);
-        //sprite.x = charOffset * 40; 
-        sprite.anchor.set(0.5);
-        //sprite.scale.set(0.5); // Adjust scale as needed
-        const subContainer = new PIXI.Container();
-
-        subContainer.addChild(sprite);
 
         // Check if meta is defined and has a 'user' key
         if (meta && meta.user !== undefined && typeof(meta.user) === "string") {
@@ -213,22 +216,33 @@ PIXI.Assets.load([
             const envID = meta.env_id !== undefined ? `-${meta.env_id}` : "";
             const extraInfo = meta.extra !== undefined ? ` ${meta.extra}` : "";
             const color = (meta.color && CSS.supports('color', meta.color)) ? meta.color : "0x000000";
-            const label = new PIXI.Text(
-                meta.user + envID + extraInfo, 
-                {
-                    fontFamily: 'Arial',
-                    fontSize: 14,
-                    fill: color,
-                    align: 'center',
-            });
-            label.x = sprite.x + sprite.width * 0.5; // Position the label next to the sprite
-            label.y -= sprite.height; // Adjust the label position as needed
-            subContainer.addChild(label);
+
+            const labelText = meta.user + envID + extraInfo;
+            if (userFilter.exec(labelText) !== null) {
+                const sprite = new PIXI.Sprite(textureChar);
+                //sprite.x = charOffset * 40; 
+                sprite.anchor.set(0.5);
+                //sprite.scale.set(0.5); // Adjust scale as needed
+                const subContainer = new PIXI.Container();
+
+                subContainer.addChild(sprite);
+                const label = new PIXI.Text(
+                    labelText, 
+                    {
+                        fontFamily: 'Arial',
+                        fontSize: 14,
+                        fill: color,
+                        align: 'center',
+                });
+                label.x = sprite.x + sprite.width * 0.5; // Position the label next to the sprite
+                label.y -= sprite.height; // Adjust the label position as needed
+                subContainer.addChild(label);
+                container.addChild(subContainer);
+
+                activeSprites.push({ subContainer, path, startTime: null });
+            }
         }
 
-        container.addChild(subContainer);
-
-        activeSprites.push({ subContainer, path, startTime: null });
     }
 
     function animate(time) {
