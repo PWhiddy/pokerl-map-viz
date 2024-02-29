@@ -1,20 +1,87 @@
 <!doctype html>
 <html lang="en">
-
 <head>
     <title>Pokemon Red Map RL Visualizer</title>
-</head>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            width: 100%;
+            height: 100%;
+            background-color: black;
+        }
 
-<body
-    style="margin: 0; padding: 0; overflow: hidden; width: 100%; height: 100%; text-align: center; background-color: black; color: white;">
-    <h1>Pokemon Red RL Map Visualizer</h1>
-    <form>
-        <label for="fname">User filter: </label>
-        <input type="text" id="fname" name="fname" onchange="setUserFilter(this.value)"
-            onkeydown="return event.keyCode != 13;"><br />
+        #userForm {
+            display: none;
+            position: fixed;
+            top: 4rem;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 2rem; 
+            border: 3px solid white; 
+            border-radius: 3rem; 
+            background-color: rgba(0, 0, 0, 0.5);
+            box-shadow: 0px 0px 10px rgba(255, 255, 255, 0.5);
+            color: white;
+        }
+
+        .form-group {
+            display: flex; 
+            align-items: center; 
+            gap: 12px; /
+        }
+
+        #userForm label {
+            color: white;
+            font-family: "Inter", sans-serif;
+            font-size: 22px; 
+            font-weight: 600;
+            width: 12rem;
+            display: block;
+        }
+
+        #userForm input[type="text"] {
+            font-family: "Inter", sans-serif;
+            font-size: 22px; 
+            font-weight: 600;
+            background-color: transparent;
+            border: none;
+            border-bottom: 3px solid white;
+            color: white;
+            padding: 0.5rem; 
+            width: 100%;
+        }
+
+        #userForm input[type="text"]:focus {
+            border-color: blue;
+            outline: none;
+        }
+    </style>
+</head>
+<body>
+    <form id="userForm">
+        <div class="form-group">
+            <label for="fname">Filter Users </label>
+            <input type="text" id="fname" name="fname" oninput="setUserFilter(this.value)"
+                   onkeydown="return event.keyCode != 13;">
+        </div>
     </form>
     <script src="pixi.js"></script>
     <script src="visualizer_live.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var form = document.getElementById('userForm');
+            form.style.display = 'none'; 
+            document.addEventListener('keydown', function(event) {
+                if ((event.key === 'f' || event.key === 'F') && document.activeElement.id !== 'fname') {
+                    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+                }
+            });
+        });
+    </script>
 </body>
-
 </html>
