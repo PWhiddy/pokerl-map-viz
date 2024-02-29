@@ -117,6 +117,73 @@ container.on('mousedown', (event) => {
     }
 });
 
+let lastTouchDistance = null;
+
+function getTouchDistance(touch1, touch2) {
+    const dx = touch1.pageX - touch2.pageX;
+    const dy = touch1.pageY - touch2.pageY;
+    return Math.sqrt(dx * dx + dy * dy);
+}
+
+function getMidpoint(touch1, touch2) {
+    return {
+        x: (touch1.pageX + touch2.pageX) / 2,
+        y: (touch1.pageY + touch2.pageY) / 2,
+    };
+}
+
+app.view.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (e.touches.length == 2) {
+        // distance between the two touches
+        const touchDistance = getTouchDistance(e.touches[0], e.touches[1]);
+        // midpoint of the two touches in screen coordinates
+        const screenMidpoint = getMidpoint(e.touches[0], e.touches[1]);
+        if (lastTouchDistance !== null) {
+            const scaleFactor = touchDistance / lastTouchDistance;
+            const newScale = container.scale.x * scaleFactor;
+            // Convert to the container's local coordinate space
+            const rect = app.view.getBoundingClientRect();
+            const localMidpoint = container.toLocal(new PIXI.Point(screenMidpoint.x - rect.left, screenMidpoint.y - rect.top));
+            container.scale.x = newScale;
+            container.scale.y = newScale;
+            const newLocalMidpoint = container.toGlobal(localMidpoint);
+            container.x += screenMidpoint.x - rect.left - newLocalMidpoint.x;
+            container.y += screenMidpoint.y - rect.top - newLocalMidpoint.y;
+        }
+        lastTouchDistance = touchDistance;
+    }
+}, { passive: false });
+
+app.view.addEventListener('touchend', () => {
+    lastTouchDistance = null; 
+});
+
+// panning
+app.view.addEventListener('touchstart', (e) => {
+    if (e.touches.length == 1) { // one finger
+        dragging = true;
+        const touch = e.touches[0];
+        dragStart.x = touch.pageX;
+        dragStart.y = touch.pageY;
+        dragOffset.x = container.x - dragStart.x;
+        dragOffset.y = container.y - dragStart.y;
+    }
+}, { passive: false });
+
+app.view.addEventListener('touchmove', (e) => {
+    if (dragging && e.touches.length == 1) {
+        const touch = e.touches[0];
+        const newPosition = { x: touch.pageX, y: touch.pageY };
+        container.x = newPosition.x + dragOffset.x;
+        container.y = newPosition.y + dragOffset.y;
+    }
+}, { passive: false });
+
+app.view.addEventListener('touchend', () => {
+    dragging = false;
+});
+
 
 let coordConversionFunc = (coords) => [0,0];
 
