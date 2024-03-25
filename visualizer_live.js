@@ -14,6 +14,7 @@ const app = new PIXI.Application({
 let socket = null;
 
 let lastFrameTime = Date.now();
+let curStats = {envs: 0, viewers: 0};
 
 let backgroundSharp = null;
 let backgroundSmooth = null;
@@ -244,11 +245,17 @@ PIXI.Assets.load([
         const ws = new WebSocket(url);
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data); // Assuming the data is JSON-encoded
-            const path = data["coords"];
-            const meta = data["metadata"];
-            console.log(meta);
-            if (Date.now() - lastFrameTime < 2 * animationDuration) {
-                startAnimationForPath(path, meta);
+            if ("stats" in data) {
+                curStats = data["stats"];
+                document.getElementById('envsCount').innerText = `${curStats.envs} Environments Streaming`;
+                document.getElementById('viewersCount').innerText = `${curStats.viewers} Viewers Connected`;
+            } else {
+                const path = data["coords"];
+                const meta = data["metadata"];
+                console.log(meta);
+                if (Date.now() - lastFrameTime < 2 * animationDuration) {
+                    startAnimationForPath(path, meta);
+                }
             }
         };
         return ws;
