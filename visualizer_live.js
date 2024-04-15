@@ -196,9 +196,14 @@ fetch('assets/map_data.json')
             return acc;
           }, {});
         coordConversionFunc = (coords) => {
-            const mapX = MAP_DATA[coords[2]].coordinates[0];
-            const mapY = MAP_DATA[coords[2]].coordinates[1];//-vec2(217.5,221.5)
-            return [coords[0] + mapX - 217.5, coords[1] + mapY - 221.5];
+            if (MAP_DATA[coords[2]] !== undefined) {
+              const mapX = MAP_DATA[coords[2]].coordinates[0];
+              const mapY = MAP_DATA[coords[2]].coordinates[1];//-vec2(217.5,221.5)
+              return [coords[0] + mapX - 217.5, coords[1] + mapY - 221.5];
+            } else {
+              console.warn(`No map coordiate location for id: ${coords[2]}`);
+              return [0,0];
+            }
         };
     })
     .catch(error => console.error('Error loading map data:', error));
