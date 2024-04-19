@@ -134,7 +134,7 @@
         },
         {
             "id": "10",
-            "name": "Saffrdon City",
+            "name": "Saffron City",
             "coordinates": [
                 234,
                 192
@@ -2425,7 +2425,7 @@
             ]
         },
         {
-            "id": "217",
+            "id": "219",
             "name": "Safari West",
             "coordinates": [
                 148,
@@ -2437,7 +2437,7 @@
             ]
         },
         {
-            "id": "218",
+            "id": "217",
             "name": "Safari East",
             "coordinates": [
                 208,
@@ -2449,7 +2449,7 @@
             ]
         },
         {
-            "id": "219",
+            "id": "218",
             "name": "Safari North",
             "coordinates": [
                 166,
