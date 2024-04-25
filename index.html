@@ -97,12 +97,20 @@
         document.addEventListener('DOMContentLoaded', function() {
             let form = document.getElementById("userForm");
             let stats = document.getElementById("statsDisplay");
+            let filterBar = document.getElementById("fname");
+            if (!!filterBar) filterBar.value="";
             form.style.display = "none"; 
             stats.style.display = "none";
             document.addEventListener('keydown', function(event) {
                 if ((event.key === 'f' || event.key === 'F') && document.activeElement.id !== 'fname') {
                     form.style.display = form.style.display === 'none' ? 'block' : 'none';
                     statsDisplay.style.display = statsDisplay.style.display === 'none' ? 'block' : 'none';
+                }else if ((event.key === 'd' || event.key === 'D') && document.activeElement.id !== 'fname') {
+                    toggleSpriteDirections();
+                }else if ((event.key === 's' || event.key === 'S') && document.activeElement.id !== 'fname') {
+                    toggleAgentsPathStacking();
+                }else if ((event.key === 'w' || event.key === 'W') && document.activeElement.id !== 'fname') {
+                    wipeAgents();
                 }
             });
         });
