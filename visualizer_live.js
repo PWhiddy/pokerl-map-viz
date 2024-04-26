@@ -370,7 +370,7 @@ PIXI.Assets.load([
             this.dataBatches = [];
             this.waitingDelete = false;
             this.animationDuration = animationDuration;
-            this.usingSpriteDirections = false;
+            this.usingSpriteDirections = true;
             this.sprite = null;
             this.changeSprite(spriteID);
             this.sprite.anchor.set(0.5);
@@ -392,24 +392,24 @@ PIXI.Assets.load([
             if (color) this.label.style.fill = color;
         }
         allocateSprite(spriteID){
-            self.usingSpriteDirections = allowSpriteDirections;
-            return self.usingSpriteDirections ? new PIXI.TilingSprite(texturesCharsDirectional[spriteID], 16, 16) : new PIXI.Sprite(texturesChars[spriteID]);
+            this.usingSpriteDirections = allowSpriteDirections;
+            return this.usingSpriteDirections ? new PIXI.TilingSprite(texturesCharsDirectional[spriteID], 16, 16) : new PIXI.Sprite(texturesChars[spriteID]);
         }       
         changeSprite(spriteID){
             this.spriteID = Math.abs(parseInt(spriteID) || 0) % texturesCharsDirectional.length;
-            this.sprite = this.allocateSprite(this.spriteID)
+            this.sprite = this.allocateSprite(this.spriteID);
         }
         updateAnimationTime(){
             if (this.waitingDelete || !allowAgentsPathStacking || this.dataBatches[this.dataBatchIdx] === undefined){
                 this.animationDuration = animationDuration;
             }else{
-                let batchSteps = Math.max(1, this.dataBatches[this.dataBatchIdx].path.length - 1)
+                let batchSteps = Math.max(1, this.dataBatches[this.dataBatchIdx].path.length - 1);
                 let nextBatchesCount = Math.max(0,this.dataBatches.length - this.dataBatchIdx - 1);
                 let totalSteps = batchSteps + nextBatchesCount;
                 for(let i = this.dataBatchIdx+1; i <this.dataBatches.length; ++i){
                     totalSteps += this.dataBatches[i].path.length;
                 }
-                let log2Steps = Math.floor((31 - Math.clz32(totalSteps)));
+                let log2Steps = Math.max(1,Math.floor((31 - Math.clz32(totalSteps))));
                 if (nextBatchesCount > 3) log2Steps += 1;
                 else if (nextBatchesCount > 7) log2Steps += 3;
                 if (log2Steps < 5) log2Steps = 1;
@@ -455,11 +455,12 @@ PIXI.Assets.load([
             const visible = Math.max(absDeltaPoints[0], absDeltaPoints[1]) < 1.5;
             this.subContainer.visible = visible;
             if (visible){
-                if (this.usingSpriteDirections){
+                if (this.usingSpriteDirections&&this.subContainer.children[0].tilePosition!==undefined){
                     let direction = Math.abs(parseInt(nextPoint[2]) || 0);
                     if (direction == 4) {
                         direction = progress >= 1 ? 0 : (absDeltaPoints[1] > 0.5 || absDeltaPoints[0] < 0.5 ? (deltaPoints[1] < -0.5 ? 1 : 0) : (deltaPoints[0] > 0.5 ? 3 : 2));
                     }
+                    console.log(this.usingSpriteDirections);
                     this.subContainer.children[0].tilePosition.x = -16 * (direction % 4);
                 }
                 this.subContainer.x = 16 * (currentPoint[0] + deltaPoints[0] * pointProgress);
