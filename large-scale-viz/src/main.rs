@@ -32,7 +32,7 @@ const SAVE_INTERVAL: u64 = 20_000;
 
 fn main() {
     // Read the map data from map_data.json
-    let file = File::open("map_data.json").expect("Failed to open map_data.json");
+    let file = File::open("../assets/map_data.json").expect("Failed to open map_data.json");
     let map_data: MapData = serde_json::from_reader(file).expect("Failed to parse map_data.json");
 
     // Create a hashmap for region coordinate lookups
