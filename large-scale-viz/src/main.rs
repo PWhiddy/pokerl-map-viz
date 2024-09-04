@@ -63,6 +63,7 @@ fn main() {
     let mut coord_counts_full = vec![vec![0u64; DIM]; DIM];
     let mut coord_counts_medium = vec![vec![0u64; DIM]; DIM];
     let mut coord_counts_fast = vec![vec![0u64; DIM]; DIM];
+    let mut coord_counts_extra_fast = vec![vec![0u64; DIM]; DIM];
 
     // Iterate over each record in the CSV
     for result in csv_reader.deserialize() {
@@ -93,6 +94,7 @@ fn main() {
                                                 coord_counts_full[global_x as usize][global_y as usize] += 1;
                                                 coord_counts_medium[global_x as usize][global_y as usize] += 1;
                                                 coord_counts_fast[global_x as usize][global_y as usize] += 1;
+                                                coord_counts_extra_fast[global_x as usize][global_y as usize] += 1;
                                                 total_coords += 1;
                                             } else {
                                                 println!("bad coords {} {}", global_x, global_y);
@@ -134,9 +136,10 @@ fn main() {
 
         // Save the map every 1M coordinate rows
         if row_count % SAVE_INTERVAL == 0 {
-            save_map_as_image("full", u32::pow(2, 24), &coord_counts_full, row_count);
-            save_map_as_image("medium", u32::pow(2, 20), &coord_counts_medium, row_count);
-            save_map_as_image("fast", u32::pow(2, 16), &coord_counts_fast, row_count);
+            save_map_as_image("full", u32::pow(2, 26), &coord_counts_full, row_count);
+            save_map_as_image("medium", u32::pow(2, 22), &coord_counts_medium, row_count);
+            save_map_as_image("fast", u32::pow(2, 18), &coord_counts_fast, row_count);
+            save_map_as_image("extra_fast", u32::pow(2, 16), &coord_counts_extra_fast, row_count);
             // coord_counts = vec![vec![0u64; DIM]; DIM];
             for row in coord_counts_medium.iter_mut() {
                 for pix in row.iter_mut() {
@@ -146,6 +149,11 @@ fn main() {
             for row in coord_counts_fast.iter_mut() {
                 for pix in row.iter_mut() {
                     *pix = ((*pix as f64) * 0.9) as u64;
+                }
+            }
+            for row in coord_counts_extra_fast.iter_mut() {
+                for pix in row.iter_mut() {
+                    *pix = ((*pix as f64) * 0.5) as u64;
                 }
             }
         }
