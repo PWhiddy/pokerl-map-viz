@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io;
+use std::io::{self};
 use std::path::Path;
+
+use chrono::{DateTime, NaiveDateTime, Utc};
+use std::str::FromStr;
 
 use csv::ReaderBuilder;
 use indicatif::ProgressBar;
@@ -27,8 +30,7 @@ struct Region {
 }
 
 const DIM: usize = 768;
-
-const SAVE_INTERVAL: u64 = 20_000;
+const SAVE_INTERVAL_SECS: u64 = 12 * 60; // 12 minutes in seconds
 
 fn main() {
     // Read the map data from map_data.json
@@ -49,6 +51,7 @@ fn main() {
     let mut row_count: u64 = 0;
     let mut total_coords: u64 = 0;
     let mut failed_rows: u64 = 0;
+    let mut img_count: u64 = 0;
 
     // Create a progress bar
     let progress_bar = ProgressBar::new_spinner();
@@ -59,130 +62,130 @@ fn main() {
     // Create a CSV reader
     let mut csv_reader = ReaderBuilder::new().has_headers(true).from_reader(reader);
 
-    // Create an array for coordinate counts
+    // Create arrays for coordinate counts
     let mut coord_counts_full = vec![vec![0u64; DIM]; DIM];
     let mut coord_counts_medium = vec![vec![0u64; DIM]; DIM];
     let mut coord_counts_fast = vec![vec![0u64; DIM]; DIM];
     let mut coord_counts_extra_fast = vec![vec![0u64; DIM]; DIM];
 
+    let mut last_save_time = None;
+
     // Iterate over each record in the CSV
     for result in csv_reader.deserialize() {
-        // Increment the row counter
         row_count += 1;
 
-        // Handle the result
-        match result {
-            Ok(record) => {
-                let record: Record = record;
+        let record: Record = match result {
+            Ok(record) => record,
+            Err(_) => {
+                failed_rows += 1;
+                continue;
+            }
+        };
 
-                // Parse the JSON message
-                match serde_json::from_str::<Value>(&record.message) {
-                    Ok(json_value) => {
-                        if let Some(coords_array) = json_value.get("coords").and_then(|v| v.as_array()) {
-                            for coords in coords_array {
-                                if let Some(coords) = coords.as_array() {
-                                    if coords.len() == 3 {
-                                        let x = coords[0].as_i64().unwrap_or(-1);
-                                        let y = coords[1].as_i64().unwrap_or(-1);
-                                        let map_id = coords[2].as_i64().unwrap_or(6666);
 
-                                        if let Some(&offsets) = region_map.get(&map_id) {
-                                            let global_x = x + offsets[0];
-                                            let global_y = y + offsets[1];
+        let timestamp = DateTime::<Utc>::from_utc(
+            NaiveDateTime::parse_from_str(&record.timestamp, "%Y-%m-%dT%H:%M:%S%.f")
+                .expect("Invalid timestamp format"),
+                    Utc,
+        );
 
-                                            if global_x >= 0 && global_x < DIM as i64 && global_y >= 0 && global_y < DIM as i64 {
-                                                coord_counts_full[global_x as usize][global_y as usize] += 1;
-                                                coord_counts_medium[global_x as usize][global_y as usize] += 1;
-                                                coord_counts_fast[global_x as usize][global_y as usize] += 1;
-                                                coord_counts_extra_fast[global_x as usize][global_y as usize] += 1;
-                                                total_coords += 1;
-                                            } else {
-                                                println!("bad coords {} {}", global_x, global_y);
-                                                failed_rows += 1;
-                                            }
-                                        } else {
-                                            println!("bad map id {}", map_id);
-                                            failed_rows += 1;
-                                        }
-                                    } else {
-                                        println!("bad coords.len() {}", coords.len());
-                                        failed_rows += 1;
-                                    }
+        if last_save_time.is_none() {
+            last_save_time = Some(timestamp);
+        }
+
+        // Parse the JSON message
+        if let Ok(json_value) = serde_json::from_str::<Value>(&record.message) {
+            if let Some(coords_array) = json_value.get("coords").and_then(|v| v.as_array()) {
+                for coords in coords_array {
+                    if let Some(coords) = coords.as_array() {
+                        if coords.len() == 3 {
+                            let x = coords[0].as_i64().unwrap_or(-1);
+                            let y = coords[1].as_i64().unwrap_or(-1);
+                            let map_id = coords[2].as_i64().unwrap_or(6666);
+
+                            if let Some(&offsets) = region_map.get(&map_id) {
+                                let global_x = x + offsets[0];
+                                let global_y = y + offsets[1];
+
+                                if global_x >= 0 && global_x < DIM as i64 && global_y >= 0 && global_y < DIM as i64 {
+                                    coord_counts_full[global_x as usize][global_y as usize] += 1;
+                                    coord_counts_medium[global_x as usize][global_y as usize] += 1;
+                                    coord_counts_fast[global_x as usize][global_y as usize] += 1;
+                                    coord_counts_extra_fast[global_x as usize][global_y as usize] += 1;
+                                    total_coords += 1;
                                 } else {
-                                    println!("no array within coords");
+                                    println!("bad coords {} {}", global_x, global_y);
                                     failed_rows += 1;
                                 }
+                            } else {
+                                println!("bad map id {}", map_id);
+                                failed_rows += 1;
                             }
                         } else {
+                            println!("bad coords.len() {}", coords.len());
                             failed_rows += 1;
                         }
-                    }
-                    Err(_) => {
+                    } else {
+                        println!("no array within coords");
                         failed_rows += 1;
                     }
                 }
-            }
-            Err(_) => {
+            } else {
                 failed_rows += 1;
             }
+        } else {
+            failed_rows += 1;
         }
 
-        // Update progress bar messages
-        let message = format!("rows: {} coords: {} failed: {}", row_count, total_coords, failed_rows);
-        if row_count % 10000000 == 0 {
-            println!("{}", message);
-        }
-        progress_bar.set_message(message);
+        // Check if 12 minutes have passed since the last save
+        if let Some(last_save) = last_save_time {
+            let elapsed = timestamp.signed_duration_since(last_save).num_seconds();
+            if elapsed >= SAVE_INTERVAL_SECS as i64 {
+                save_map_as_image("full", u32::pow(2, 26), &coord_counts_full, row_count, img_count);
+                save_map_as_image("medium", u32::pow(2, 22), &coord_counts_medium, row_count, img_count);
+                save_map_as_image("fast", u32::pow(2, 18), &coord_counts_fast, row_count, img_count);
+                save_map_as_image("extra_fast", u32::pow(2, 16), &coord_counts_extra_fast, row_count, img_count);
+                img_count += 1; 
+                last_save_time = Some(timestamp);
 
-        // Save the map every 1M coordinate rows
-        if row_count % SAVE_INTERVAL == 0 {
-            save_map_as_image("full", u32::pow(2, 26), &coord_counts_full, row_count);
-            save_map_as_image("medium", u32::pow(2, 22), &coord_counts_medium, row_count);
-            save_map_as_image("fast", u32::pow(2, 18), &coord_counts_fast, row_count);
-            save_map_as_image("extra_fast", u32::pow(2, 16), &coord_counts_extra_fast, row_count);
-            // coord_counts = vec![vec![0u64; DIM]; DIM];
-            for row in coord_counts_medium.iter_mut() {
-                for pix in row.iter_mut() {
-                    *pix = ((*pix as f64) * 0.99) as u64;
+                for row in coord_counts_medium.iter_mut() {
+                    for pix in row.iter_mut() {
+                        *pix = ((*pix as f64) * 0.99) as u64;
+                    }
                 }
-            }
-            for row in coord_counts_fast.iter_mut() {
-                for pix in row.iter_mut() {
-                    *pix = ((*pix as f64) * 0.9) as u64;
+                for row in coord_counts_fast.iter_mut() {
+                    for pix in row.iter_mut() {
+                        *pix = ((*pix as f64) * 0.9) as u64;
+                    }
                 }
-            }
-            for row in coord_counts_extra_fast.iter_mut() {
-                for pix in row.iter_mut() {
-                    *pix = ((*pix as f64) * 0.5) as u64;
+                for row in coord_counts_extra_fast.iter_mut() {
+                    for pix in row.iter_mut() {
+                        *pix = ((*pix as f64) * 0.5) as u64;
+                    }
                 }
             }
         }
+
+        progress_bar.set_message(format!("rows: {} coords: {} failed: {} timestamp: {}", row_count, total_coords, failed_rows, timestamp));
     }
-
-    // Save the final map
-
-    //save_map_as_image(&coord_counts_full, row_count);
-
 
     println!("rows: {} coords: {} failed: {}", row_count, total_coords, failed_rows);
 }
 
-
-fn save_map_as_image(name: &str, max_count: u32, coord_counts: &Vec<Vec<u64>>, row_count: u64) {
+fn save_map_as_image(name: &str, max_count: u32, coord_counts: &Vec<Vec<u64>>, row_count: u64, img_count: u64) {
     let cur_max_pixel = coord_counts.iter().flatten().max().cloned().unwrap_or(1);
-    println!("{} image: {} true max pixel: {} using max {} ", name, row_count / SAVE_INTERVAL, cur_max_pixel, max_count);
+    println!("{} image: {} true max pixel: {} using max {} ", name, img_count, cur_max_pixel, max_count);
 
     let mut img: ImageBuffer<Rgb<f32>, Vec<f32>> = ImageBuffer::new(DIM as u32, DIM as u32);
 
     for (x, row) in coord_counts.iter().enumerate() {
         for (y, &count) in row.iter().enumerate() {
-            // Scale count to fit in u16 range
-            let intensity = (f64::min((count as f64) / (max_count as f64), 1.0)) as f32;// * u16::MAX as f64) as u16;
+            let intensity = (f64::min((count as f64) / (max_count as f64), 1.0)) as f32;
             img.put_pixel(x as u32, y as u32, Rgb([intensity, intensity, intensity]));
         }
     }
 
-    let filename = format!("images/coord_map_{name}_{}.exr", row_count / SAVE_INTERVAL);
+    let filename = format!("images/coord_map_{name}_{}.exr", img_count);
     img.save_with_format(Path::new(&filename), image::ImageFormat::OpenExr)
         .expect("Failed to save image");
 }
