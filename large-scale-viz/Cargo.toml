@@ -13,3 +13,12 @@ indicatif = "0.17.8"
 serde = {version = "1.0.204", features = ["derive"]}
 serde_json = "1.0.120"
 tiff = "0.9.1"
+
+[[bin]]
+name = "extract_users"
+
+#[[bin]]
+#name = "extract_users_fast"
+
+#[[bin]]
+#name = "extract_users_fast_v2"
