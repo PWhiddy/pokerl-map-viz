@@ -20,6 +20,7 @@ env = StreamWrapper(
                 "env_id": id, # environment identifier
                 "color": "#0033ff", # choose your color :)
                 "extra": "", # any extra text you put here will be displayed
+                "sprite_id": 0, # chooses your character sprite, 0 to 50. (optional)
             }
         )
 ```

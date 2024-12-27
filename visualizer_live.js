@@ -279,12 +279,18 @@ PIXI.Assets.load([
     // Refresh WebSocket connection every 2 minutes (120000 milliseconds)
     setInterval(refreshWS, 120000);
 
+
+
     let baseTextureChar = new PIXI.BaseTexture("assets/characters_transparent.png", {
         scaleMode: PIXI.SCALE_MODES.NEAREST,
     });
 
     const charOffset = 1; // 1 index here gets sprite direction index
-    let textureChar = getSpriteByCoords(charOffset, 0, baseTextureChar);
+
+    let textureChars = [];
+    for (let i = 0; i < 50; i++) {
+        textureChars.push(getSpriteByCoords(charOffset, i, baseTextureChar))
+    }
 
 
     function startAnimationForPath(path, meta) {
@@ -298,7 +304,14 @@ PIXI.Assets.load([
 
             const labelText = meta.user + envID + extraInfo;
             if (userFilter.exec(labelText) !== null) {
-                const sprite = new PIXI.Sprite(textureChar);
+                let spriteIdx = 0;
+                if (meta.sprite_id !== undefined) {
+                    let parsed = parseInt(meta.sprite_id, 10);
+                    if (!isNaN(parsed) && parsed > 0 && parsed < 50) {
+                        spriteIdx = parsed;
+                    }
+                }
+                const sprite = new PIXI.Sprite(textureChars[spriteIdx]);
                 //sprite.x = charOffset * 40; 
                 sprite.anchor.set(0.5);
                 //sprite.scale.set(0.5); // Adjust scale as needed
