@@ -12,6 +12,8 @@ expressWs(app);
 const broadcasters = new Set();
 const receivers = new Set();
 
+const testEchoClients = new Set();
+
 function doGC() {
         if (global.gc) {
             global.gc();
@@ -65,6 +67,26 @@ app.ws('/receive', function(ws, req) {
     receivers.delete(ws);
     //console.log('Receiver disconnected');
   });
+});
+
+app.ws('/ws-test', (ws, req) => {
+  testEchoClients.add(ws);
+  
+  ws.on('close', () => {
+    testEchoClients.delete(ws);
+  });
+
+  ws.on('message', (message) => {
+    testEchoClients.forEach(ec => {
+      try {
+        ec.send(message);
+        //console.log(message);
+      } catch (e) {
+        console.log("send ws-test error : ", e);
+      }
+    });
+  });
+  
 });
 
 const port = 3344;
