@@ -40,11 +40,15 @@ app.ws('/broadcast', function(ws, req) {
 
   ws.on('message', function(message) {
     //console.log('Broadcasting: %s', message);
-    receivers.forEach(receiver => {
-      //if (receiver.readyState === WebSocket.OPEN) {
-      receiver.send(message);
-      //}
-    });
+    //console.log(Object.keys(message));
+    message = JSON.parse(message)
+    if (message["metadata"] && message["coords"] && message["metadata"]["user"] !== "") {
+            receivers.forEach(receiver => {
+              //if (receiver.readyState === WebSocket.OPEN) {
+              receiver.send(JSON.stringify(message));
+              //}
+            });
+    }
   });
 
   ws.on('close', () => {
