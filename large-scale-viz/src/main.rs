@@ -4,13 +4,14 @@ use std::io::{self};
 use std::path::Path;
 
 use chrono::{DateTime, NaiveDateTime, Utc};
-use std::str::FromStr;
 
 use csv::ReaderBuilder;
 use indicatif::ProgressBar;
 use serde::Deserialize;
 use serde_json::Value;
 use image::{ImageBuffer, Rgb};
+
+use std::io::Write;
 
 #[derive(Debug, Deserialize)]
 struct Record {
@@ -64,6 +65,7 @@ fn main() {
 
     // Create arrays for coordinate counts
     let mut coord_counts_full = vec![vec![0u64; DIM]; DIM];
+    let mut coord_counts_slow = vec![vec![0u64; DIM]; DIM];
     let mut coord_counts_medium = vec![vec![0u64; DIM]; DIM];
     let mut coord_counts_fast = vec![vec![0u64; DIM]; DIM];
     let mut coord_counts_extra_fast = vec![vec![0u64; DIM]; DIM];
@@ -110,6 +112,7 @@ fn main() {
                                 if global_x >= 0 && global_x < DIM as i64 && global_y >= 0 && global_y < DIM as i64 {
                                     coord_counts_full[global_x as usize][global_y as usize] += 1;
                                     coord_counts_medium[global_x as usize][global_y as usize] += 1;
+                                    coord_counts_slow[global_x as usize][global_y as usize] += 1;
                                     coord_counts_fast[global_x as usize][global_y as usize] += 1;
                                     coord_counts_extra_fast[global_x as usize][global_y as usize] += 1;
                                     total_coords += 1;
@@ -141,13 +144,18 @@ fn main() {
         if let Some(last_save) = last_save_time {
             let elapsed = timestamp.signed_duration_since(last_save).num_seconds();
             if elapsed >= SAVE_INTERVAL_SECS as i64 {
-                save_map_as_image("full", u32::pow(2, 26), &coord_counts_full, row_count, img_count);
+                save_map_as_image("full", u32::pow(2, 28), &coord_counts_full, row_count, img_count);
+                save_map_as_image("slow", u32::pow(2, 22), &coord_counts_slow, row_count, img_count);
                 save_map_as_image("medium", u32::pow(2, 22), &coord_counts_medium, row_count, img_count);
                 save_map_as_image("fast", u32::pow(2, 18), &coord_counts_fast, row_count, img_count);
-                save_map_as_image("extra_fast", u32::pow(2, 16), &coord_counts_extra_fast, row_count, img_count);
+                save_map_as_image("extra_fast", u32::pow(2, 14), &coord_counts_extra_fast, row_count, img_count);
                 img_count += 1; 
                 last_save_time = Some(timestamp);
-
+                for row in coord_counts_slow.iter_mut() {
+                    for pix in row.iter_mut() {
+                        *pix = ((*pix as f64) * 0.998) as u64;
+                    }
+                }
                 for row in coord_counts_medium.iter_mut() {
                     for pix in row.iter_mut() {
                         *pix = ((*pix as f64) * 0.99) as u64;
@@ -160,13 +168,21 @@ fn main() {
                 }
                 for row in coord_counts_extra_fast.iter_mut() {
                     for pix in row.iter_mut() {
-                        *pix = ((*pix as f64) * 0.5) as u64;
+                        *pix = ((*pix as f64) * 0.25) as u64;
                     }
                 }
             }
         }
 
         progress_bar.set_message(format!("rows: {} coords: {} failed: {} timestamp: {}", row_count, total_coords, failed_rows, timestamp));
+    }
+    {
+        let mut file = File::create("full_coord_count_map_u64_768x768.bin").unwrap();
+        for row in &coord_counts_full {
+            for &val in row {
+                file.write_all(&val.to_le_bytes()).unwrap();
+            }
+        }
     }
 
     println!("rows: {} coords: {} failed: {}", row_count, total_coords, failed_rows);
