@@ -43,7 +43,12 @@ app.ws('/broadcast', function(ws, req) {
   ws.on('message', function(message) {
     //console.log('Broadcasting: %s', message);
     //console.log(Object.keys(message));
-    message = JSON.parse(message)
+    try {
+      message = JSON.parse(message);
+    } catch (err) {
+      console.warn("Invalid JSON received:", err.message);
+      return;
+    }       
     if (message["metadata"] && message["coords"] && message["metadata"]["user"] !== "") {
             receivers.forEach(receiver => {
               //if (receiver.readyState === WebSocket.OPEN) {
