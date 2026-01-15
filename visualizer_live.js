@@ -20,7 +20,7 @@ let backgroundSharp = null;
 let backgroundSmooth = null;
 
 // animate each batch of updates for 12 seconds
-const animationDuration = 12000;
+const animationDuration = 30000;
 
 const container = new PIXI.Container();
 // scale and center container initially
@@ -285,11 +285,18 @@ PIXI.Assets.load([
         scaleMode: PIXI.SCALE_MODES.NEAREST,
     });
 
-    const charOffset = 1; // 1 index here gets sprite direction index
+    // Create texture arrays for each direction
+    // Down: x=1, Up: x=4, Left: x=6, Right: x=8
+    let textureCharsDown = [];
+    let textureCharsUp = [];
+    let textureCharsLeft = [];
+    let textureCharsRight = [];
 
-    let textureChars = [];
     for (let i = 0; i < 50; i++) {
-        textureChars.push(getSpriteByCoords(charOffset, i, baseTextureChar))
+        textureCharsDown.push(getSpriteByCoords(1, i, baseTextureChar));
+        textureCharsUp.push(getSpriteByCoords(4, i, baseTextureChar));
+        textureCharsLeft.push(getSpriteByCoords(6, i, baseTextureChar));
+        textureCharsRight.push(getSpriteByCoords(8, i, baseTextureChar));
     }
 
 
@@ -311,15 +318,15 @@ PIXI.Assets.load([
                         spriteIdx = parsed;
                     }
                 }
-                const sprite = new PIXI.Sprite(textureChars[spriteIdx]);
-                //sprite.x = charOffset * 40; 
+                const sprite = new PIXI.Sprite(textureCharsDown[spriteIdx]);
+                //sprite.x = charOffset * 40;
                 sprite.anchor.set(0.5);
                 //sprite.scale.set(0.5); // Adjust scale as needed
                 const subContainer = new PIXI.Container();
 
                 subContainer.addChild(sprite);
                 const label = new PIXI.Text(
-                    labelText, 
+                    labelText,
                     {
                         fontFamily: 'Arial',
                         fontSize: 14,
@@ -331,7 +338,7 @@ PIXI.Assets.load([
                 subContainer.addChild(label);
                 container.addChild(subContainer);
 
-                activeSprites.push({ subContainer, path, startTime: null });
+                activeSprites.push({ subContainer, sprite, spriteIdx, path, startTime: null });
             }
         }
 
@@ -352,6 +359,29 @@ PIXI.Assets.load([
             const nextPoint = coordConversionFunc(obj.path[nextIndex]);
             obj.subContainer.x = 16*(currentPoint[0] + (nextPoint[0] - currentPoint[0]) * pointProgress);
             obj.subContainer.y = 16*(currentPoint[1] + (nextPoint[1] - currentPoint[1]) * pointProgress);
+
+            // Calculate movement direction and update sprite texture
+            if (currentIndex !== nextIndex) {
+                const dx = nextPoint[0] - currentPoint[0];
+                const dy = nextPoint[1] - currentPoint[1];
+
+                // Determine which direction is dominant
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    // Horizontal movement is dominant
+                    if (dx > 0) {
+                        obj.sprite.texture = textureCharsRight[obj.spriteIdx];
+                    } else {
+                        obj.sprite.texture = textureCharsLeft[obj.spriteIdx];
+                    }
+                } else {
+                    // Vertical movement is dominant
+                    if (dy > 0) {
+                        obj.sprite.texture = textureCharsDown[obj.spriteIdx];
+                    } else {
+                        obj.sprite.texture = textureCharsUp[obj.spriteIdx];
+                    }
+                }
+            }
 
             if (progress >= 1) {
                 container.removeChild(obj.subContainer); // Remove sprite from the scene
