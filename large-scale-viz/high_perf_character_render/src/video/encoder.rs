@@ -43,8 +43,10 @@ impl ProResEncoder {
                 &format!("{}", fps),
                 "-i",
                 "pipe:0", // Read from stdin
-                "-max_interleave_delta",
-                "0", // Disable interleaving limit
+                "-threads",
+                "8", // Use 8 threads for encoding
+                "-max_muxing_queue_size",
+                "16", // Small muxing queue to limit buffering
                 "-c:v",
                 "prores_ks", // ProRes encoder
                 "-profile:v",

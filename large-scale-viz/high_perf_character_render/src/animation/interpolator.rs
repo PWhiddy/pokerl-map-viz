@@ -52,14 +52,29 @@ impl AnimationInterpolator {
         let current_frame = &sequence.frames[state.current_frame_index];
         let next_frame = &sequence.frames[state.next_frame_index];
 
-        // Convert coordinates to pixel positions
+        // Convert coordinates to pixel positions FIRST
         let current_pos = self.coordinate_mapper.convert_coords(&current_frame.coords);
         let next_pos = self.coordinate_mapper.convert_coords(&next_frame.coords);
 
-        // Linear interpolation
+        // Check pixel distance - only interpolate if moving <= 16 pixels (1 tile)
+        let pixel_dx = (next_pos[0] - current_pos[0]).abs();
+        let pixel_dy = (next_pos[1] - current_pos[1]).abs();
+        let pixel_distance = pixel_dx.max(pixel_dy);
+
+        // Only interpolate if moving contiguously (1 tile = 16 pixels)
+        let should_interpolate = pixel_distance <= 16.0;
+
+        // If jumping > 16 pixels, don't interpolate - just show at current position
+        let interpolation_t = if should_interpolate {
+            state.interpolation_t
+        } else {
+            0.0
+        };
+
+        // Linear interpolation (or no interpolation if jumping)
         let position = [
-            current_pos[0] + (next_pos[0] - current_pos[0]) * state.interpolation_t,
-            current_pos[1] + (next_pos[1] - current_pos[1]) * state.interpolation_t,
+            current_pos[0] + (next_pos[0] - current_pos[0]) * interpolation_t,
+            current_pos[1] + (next_pos[1] - current_pos[1]) * interpolation_t,
         ];
 
         // Determine direction based on movement

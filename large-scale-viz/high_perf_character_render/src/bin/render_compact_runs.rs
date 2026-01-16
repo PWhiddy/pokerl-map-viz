@@ -1,17 +1,18 @@
-use anyhow::Result;
-use chrono::Duration;
+use anyhow::{Context, Result};
 use clap::Parser;
-use sprite_video_renderer::data::{CoordinateMapper, ParquetFilter, ParquetReader};
+use sprite_video_renderer::data::CoordinateMapper;
 use sprite_video_renderer::rendering::{GpuContext, SpriteInstance, SpriteRenderer, TextureAtlas};
 use sprite_video_renderer::video::ProResEncoder;
+use std::fs::File;
+use std::io::{BufReader, Read};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about = "Render all runs from parquet overlaid", long_about = None)]
+#[command(author, version, about = "Render compact runs to video", long_about = None)]
 struct Args {
-    /// Path to parquet file
+    /// Input compact runs file (compressed or uncompressed)
     #[arg(long)]
-    parquet_file: PathBuf,
+    input: PathBuf,
 
     /// Path to sprite sheet image
     #[arg(long, default_value = "../../assets/characters_transparent.png")]
@@ -22,11 +23,11 @@ struct Args {
     map_data: PathBuf,
 
     /// Output video file path
-    #[arg(long, default_value = "overlaid_runs.mov")]
+    #[arg(long, default_value = "compact_runs_output.mov")]
     output: PathBuf,
 
     /// Frame rate
-    #[arg(long, default_value = "30")]
+    #[arg(long, default_value = "60")]
     fps: u32,
 
     /// Canvas width
@@ -37,29 +38,31 @@ struct Args {
     #[arg(long, default_value = "8192")]
     height: u32,
 
-    /// Interval between coordinate points in milliseconds
+    /// Interval between coordinate points in milliseconds (base interval)
     #[arg(long, default_value = "500")]
     interval_ms: u32,
 
-    /// Minimum run duration in seconds
-    #[arg(long, default_value = "60")]
-    min_duration_secs: i64,
+    /// Animation speed multiplier (4 = 4x faster, uses 125ms between coords instead of 500ms)
+    #[arg(long, default_value = "4")]
+    speed_multiplier: u32,
 
     /// Maximum number of frames to render (for testing)
     #[arg(long)]
     max_frames: Option<usize>,
 }
 
+#[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
-struct CompactFrame {
-    coords: [i64; 3],
+struct CompactCoord {
+    x: u16,
+    y: u16,
+    map_id: u16,
 }
 
 #[derive(Debug)]
-struct RunData {
+struct CompactRun {
     sprite_id: u8,
-    frames: Vec<CompactFrame>,
-    duration_ms: f32,
+    coords: Vec<CompactCoord>,
 }
 
 fn main() -> Result<()> {
@@ -71,150 +74,32 @@ async fn run() -> Result<()> {
 
     let args = Args::parse();
 
-    log::info!("=== Rendering overlaid runs from parquet ===");
-    log::info!("Parquet file: {:?}", args.parquet_file);
+    log::info!("=== Rendering compact runs ===");
+    log::info!("Input file: {:?}", args.input);
     log::info!("Output: {:?}", args.output);
-    log::info!("Min run duration: {}s", args.min_duration_secs);
+    log::info!("Speed multiplier: {}x ({}ms between coords)", args.speed_multiplier, args.interval_ms / args.speed_multiplier);
 
     // Load coordinate mapper
     log::info!("Loading map data...");
     let coordinate_mapper = CoordinateMapper::load(&args.map_data)?;
 
-    // Read parquet file
-    log::info!("Reading parquet file...");
-    let reader = ParquetReader::new(ParquetFilter::default());
-    let mut frames = reader.read_file(&args.parquet_file)?;
-
-    log::info!("Total frames read: {}", frames.len());
-
-    // Sort all frames by user+env_id for grouping
-    log::info!("Sorting frames...");
-    frames.sort_by(|a, b| {
-        (&a.user, &a.env_id, a.timestamp, a.path_index)
-            .cmp(&(&b.user, &b.env_id, b.timestamp, b.path_index))
-    });
-
-    // Detect runs by scanning through sorted frames and extract compact data
-    log::info!("Detecting runs with reset detection...");
-    let mut runs = Vec::new();
-    let gap_threshold = Duration::minutes(2);
-    let min_duration = Duration::seconds(args.min_duration_secs);
-    let reset_maps = vec![0i64, 37, 40];
-
-    let mut i = 0;
-    while i < frames.len() {
-        let run_user = &frames[i].user;
-        let run_env_id = &frames[i].env_id;
-        let run_sprite_id = frames[i].sprite_id;
-
-        let mut run_start_idx = i;
-
-        // Find all frames for this user+env_id
-        while i < frames.len() && &frames[i].user == run_user && &frames[i].env_id == run_env_id {
-            i += 1;
-        }
-
-        let user_env_end_idx = i;
-
-        // Now split this user+env_id into runs
-        let mut run_current_idx = run_start_idx;
-
-        for j in (run_start_idx + 1)..user_env_end_idx {
-            let time_gap = frames[j].timestamp - frames[j-1].timestamp;
-            let curr_map = frames[j].coords[2];
-            let prev_map = frames[j-1].coords[2];
-
-            let mut should_split = false;
-
-            // Split on 2-minute gaps
-            if time_gap >= gap_threshold {
-                should_split = true;
-            }
-
-            // Split when jumping TO a reset map
-            if reset_maps.contains(&curr_map) && !reset_maps.contains(&prev_map) {
-                should_split = true;
-            }
-
-            if should_split {
-                let duration = frames[j-1].timestamp - frames[run_current_idx].timestamp;
-
-                // Filter by minimum duration
-                if duration >= min_duration {
-                    let duration_ms = duration.num_milliseconds() as f32;
-
-                    // Extract only the coords we need (discard all strings)
-                    let compact_frames: Vec<CompactFrame> = frames[run_current_idx..j]
-                        .iter()
-                        .map(|f| CompactFrame { coords: f.coords })
-                        .collect();
-
-                    runs.push(RunData {
-                        sprite_id: run_sprite_id,
-                        frames: compact_frames,
-                        duration_ms,
-                    });
-                }
-
-                run_current_idx = j;
-            }
-        }
-
-        // Process final run for this user+env_id
-        if run_current_idx < user_env_end_idx {
-            let duration = frames[user_env_end_idx - 1].timestamp - frames[run_current_idx].timestamp;
-
-            if duration >= min_duration {
-                let duration_ms = duration.num_milliseconds() as f32;
-
-                // Extract only the coords we need
-                let compact_frames: Vec<CompactFrame> = frames[run_current_idx..user_env_end_idx]
-                    .iter()
-                    .map(|f| CompactFrame { coords: f.coords })
-                    .collect();
-
-                runs.push(RunData {
-                    sprite_id: run_sprite_id,
-                    frames: compact_frames,
-                    duration_ms,
-                });
-            }
-        }
-    }
-
-    // Drop the huge frames vector immediately
-    drop(frames);
-
-    log::info!("Total runs after filtering: {}", runs.len());
+    // Load runs from file
+    log::info!("Loading compact runs...");
+    let runs = load_compact_runs(&args.input)?;
+    log::info!("Loaded {} runs", runs.len());
 
     if runs.is_empty() {
-        log::warn!("No runs to render after filtering!");
+        log::warn!("No runs to render!");
         return Ok(());
     }
 
-    // Log sample run details
-    if !runs.is_empty() {
-        let sample = &runs[0];
-        log::info!("Sample run: frames={}, duration={:.1}s",
-                   sample.frames.len(), sample.duration_ms / 1000.0);
-        log::info!("  First frame coords: {:?}", sample.frames[0].coords);
-    }
-
-    // Find max duration
-    let max_duration_ms = runs
-        .iter()
-        .map(|r| r.duration_ms)
-        .max_by(|a, b| a.partial_cmp(b).unwrap())
-        .unwrap();
-
-    log::info!("Max run duration: {:.2}s", max_duration_ms / 1000.0);
-
-    // Store coordinate mapper for later use
-    let coordinate_mapper = coordinate_mapper;
+    // Calculate max duration (with faster animation speed)
+    let effective_interval_ms = (args.interval_ms / args.speed_multiplier) as f32;
+    let max_coords = runs.iter().map(|r| r.coords.len()).max().unwrap();
+    let max_duration_ms = max_coords as f32 * effective_interval_ms;
 
     let mut total_frames = (max_duration_ms / 1000.0 * args.fps as f32).ceil() as usize;
 
-    // Limit frames if max_frames is specified
     if let Some(max) = args.max_frames {
         if max < total_frames {
             total_frames = max;
@@ -224,7 +109,7 @@ async fn run() -> Result<()> {
 
     log::info!("Animation: {:.2} seconds, {} frames @ {} fps",
                total_frames as f32 / args.fps as f32, total_frames, args.fps);
-    log::info!("Total sprites (runs): {}", runs.len());
+    log::info!("Total runs: {}", runs.len());
 
     // Initialize GPU
     log::info!("Initializing GPU...");
@@ -242,7 +127,7 @@ async fn run() -> Result<()> {
         &texture_atlas,
         args.width,
         args.height,
-        runs.len() + 1000, // Max sprites with buffer
+        runs.len() + 1000,
     )?;
 
     // Create encoder
@@ -260,22 +145,26 @@ async fn run() -> Result<()> {
         let mut sprite_instances = Vec::new();
 
         for run in &runs {
-            // Calculate which frame within this run we should be at
-            let run_frame_index = (time_ms / args.interval_ms as f32) as usize;
+            // Calculate which coord index we're at (using all coords, just faster)
+            let coord_index = (time_ms / effective_interval_ms) as usize;
 
-            if run_frame_index >= run.frames.len() {
+            if coord_index >= run.coords.len() {
                 continue; // This run has finished
             }
 
-            let next_frame_index = (run_frame_index + 1).min(run.frames.len() - 1);
-            let interpolation_t = (time_ms / args.interval_ms as f32).fract();
+            let next_index = (coord_index + 1).min(run.coords.len() - 1);
+            let interpolation_t = (time_ms / effective_interval_ms).fract();
 
-            let current_frame = &run.frames[run_frame_index];
-            let next_frame = &run.frames[next_frame_index];
+            let current_coord = &run.coords[coord_index];
+            let next_coord = &run.coords[next_index];
 
-            // Convert coordinates to pixel positions FIRST
-            let current_pos = coordinate_mapper.convert_coords(&current_frame.coords);
-            let next_pos = coordinate_mapper.convert_coords(&next_frame.coords);
+            // Convert to i64 for coordinate mapper
+            let current_coords = [current_coord.x as i64, current_coord.y as i64, current_coord.map_id as i64];
+            let next_coords = [next_coord.x as i64, next_coord.y as i64, next_coord.map_id as i64];
+
+            // Convert to pixel positions
+            let current_pos = coordinate_mapper.convert_coords(&current_coords);
+            let next_pos = coordinate_mapper.convert_coords(&next_coords);
 
             // Check pixel distance - only interpolate if moving <= 16 pixels (1 tile)
             let pixel_dx = (next_pos[0] - current_pos[0]).abs();
@@ -324,8 +213,6 @@ async fn run() -> Result<()> {
                     log::info!("  Sprite {}: pos=[{:.1}, {:.1}] in_bounds=({}, {})",
                                i, instance.position[0], instance.position[1], in_bounds_x, in_bounds_y);
                 }
-            } else {
-                log::warn!("No sprites rendered in first frame!");
             }
         }
 
@@ -344,7 +231,7 @@ async fn run() -> Result<()> {
         encoder.write_frame(&pixels)?;
 
         // Progress logging
-        if frame_number % 30 == 0 || frame_number == total_frames - 1 {
+        if frame_number % 60 == 0 || frame_number == total_frames - 1 {
             let elapsed = start_time.elapsed().as_secs_f32();
             let fps_actual = (frame_number + 1) as f32 / elapsed;
             let progress = (frame_number + 1) as f32 / total_frames as f32 * 100.0;
@@ -374,8 +261,63 @@ async fn run() -> Result<()> {
     encoder.finish()?;
 
     log::info!("✓ Done! Created {:?}", args.output);
-    log::info!("Video: {}x{} @ {} fps, {:.2} seconds",
-               args.width, args.height, args.fps, max_duration_ms / 1000.0);
 
     Ok(())
+}
+
+fn load_compact_runs(path: &PathBuf) -> Result<Vec<CompactRun>> {
+    let mut reader: Box<dyn Read> = if path.extension().and_then(|s| s.to_str()) == Some("zst") {
+        // Decompress
+        log::info!("Decompressing zstd file...");
+        let file = File::open(path)?;
+        Box::new(zstd::Decoder::new(file)?)
+    } else {
+        // Read uncompressed
+        let file = File::open(path)?;
+        Box::new(BufReader::new(file))
+    };
+
+    let mut runs = Vec::new();
+    let mut buffer = vec![0u8; 1024 * 1024]; // 1MB buffer for reading
+
+    loop {
+        // Read sprite_id
+        let mut sprite_id_buf = [0u8; 1];
+        match reader.read_exact(&mut sprite_id_buf) {
+            Ok(_) => {},
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Err(e) => return Err(e.into()),
+        }
+        let sprite_id = sprite_id_buf[0];
+
+        // Read coord_count
+        let mut count_buf = [0u8; 2];
+        reader.read_exact(&mut count_buf)?;
+        let coord_count = u16::from_le_bytes(count_buf) as usize;
+
+        // Read coords
+        let bytes_to_read = coord_count * std::mem::size_of::<CompactCoord>();
+        if buffer.len() < bytes_to_read {
+            buffer.resize(bytes_to_read, 0);
+        }
+
+        reader.read_exact(&mut buffer[..bytes_to_read])?;
+
+        let mut coords = Vec::with_capacity(coord_count);
+        for i in 0..coord_count {
+            let offset = i * std::mem::size_of::<CompactCoord>();
+            let coord = unsafe {
+                std::ptr::read_unaligned(buffer[offset..].as_ptr() as *const CompactCoord)
+            };
+            coords.push(coord);
+        }
+
+        runs.push(CompactRun { sprite_id, coords });
+
+        if runs.len() % 100000 == 0 {
+            log::info!("Loaded {} runs...", runs.len());
+        }
+    }
+
+    Ok(runs)
 }

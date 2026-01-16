@@ -35,3 +35,6 @@ log = "0.4"
 
 # Async
 futures-intrusive = "0.5"
+
+# Compression
+zstd = "0.13"
