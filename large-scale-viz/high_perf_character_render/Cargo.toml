@@ -1,0 +1,37 @@
+[package]
+name = "sprite-video-renderer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Parquet reading
+arrow = "54"
+parquet = "54"
+
+# WGPU rendering
+wgpu = "23"
+pollster = "0.4"
+bytemuck = { version = "1", features = ["derive"] }
+
+# Image loading
+image = "0.25"
+
+# JSON parsing for map_data.json
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# CLI
+clap = { version = "4", features = ["derive"] }
+regex = "1"
+
+# Utilities
+anyhow = "1"
+chrono = "0.4"
+rayon = "1"
+
+# Logging
+env_logger = "0.11"
+log = "0.4"
+
+# Async
+futures-intrusive = "0.5"
