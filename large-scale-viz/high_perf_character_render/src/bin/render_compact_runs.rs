@@ -134,6 +134,10 @@ async fn run() -> Result<()> {
     log::info!("Starting video encoder...");
     let mut encoder = ProResEncoder::new(&args.output, args.width, args.height, args.fps)?;
 
+    // Track last direction for each run
+    let mut run_directions: Vec<sprite_video_renderer::data::Direction> =
+        vec![sprite_video_renderer::data::Direction::Down; runs.len()];
+
     // Render frames
     log::info!("Rendering {} frames...", total_frames);
     let start_time = std::time::Instant::now();
@@ -144,7 +148,7 @@ async fn run() -> Result<()> {
         // Calculate sprite instances for this frame
         let mut sprite_instances = Vec::new();
 
-        for run in &runs {
+        for (run_idx, run) in runs.iter().enumerate() {
             // Calculate which coord index we're at (using all coords, just faster)
             let coord_index = (time_ms / effective_interval_ms) as usize;
 
@@ -180,19 +184,25 @@ async fn run() -> Result<()> {
                 current_pos[1] + (next_pos[1] - current_pos[1]) * interp_t - 8.0,
             ];
 
-            // Determine direction
+            // Determine direction - only update if there's movement
             let dx = next_pos[0] - current_pos[0];
             let dy = next_pos[1] - current_pos[1];
-            let direction = if dx.abs() > dy.abs() {
-                if dx > 0.0 { sprite_video_renderer::data::Direction::Right }
-                else { sprite_video_renderer::data::Direction::Left }
-            } else {
-                if dy > 0.0 { sprite_video_renderer::data::Direction::Down }
-                else { sprite_video_renderer::data::Direction::Up }
-            };
+
+            if dx.abs() > 0.1 || dy.abs() > 0.1 {
+                // There's movement, calculate new direction
+                let new_direction = if dx.abs() > dy.abs() {
+                    if dx > 0.0 { sprite_video_renderer::data::Direction::Right }
+                    else { sprite_video_renderer::data::Direction::Left }
+                } else {
+                    if dy > 0.0 { sprite_video_renderer::data::Direction::Down }
+                    else { sprite_video_renderer::data::Direction::Up }
+                };
+                run_directions[run_idx] = new_direction;
+            }
+            // else: no movement, keep the stored direction
 
             // Get texture coordinates
-            let tex_coords = texture_atlas.get_sprite_tex_coords(run.sprite_id, direction);
+            let tex_coords = texture_atlas.get_sprite_tex_coords(run.sprite_id, run_directions[run_idx]);
 
             sprite_instances.push(SpriteInstance {
                 position,
