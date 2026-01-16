@@ -19,8 +19,11 @@ let curStats = {envs: 0, viewers: 0};
 let backgroundSharp = null;
 let backgroundSmooth = null;
 
-// animate each batch of updates for 12 seconds
-const animationDuration = 30000;
+// Default animation duration - will be adjusted based on batch timing
+const defaultAnimationDuration = 30000;
+
+// Sprite cache: Maps "user-envID" to sprite state
+const spriteCache = new Map();
 
 const container = new PIXI.Container();
 // scale and center container initially
@@ -49,13 +52,27 @@ function smoothstep(min, max, value) {
 
 let userFilter = new RegExp("");
 let activeSprites = [];
+
+// Helper function to calculate exponential moving average
+function updateMovingAverage(currentAvg, newValue, alpha = 0.3) {
+    if (currentAvg === null) return newValue;
+    return alpha * newValue + (1 - alpha) * currentAvg;
+}
+
+// Helper function to get cache key
+function getCacheKey(meta) {
+    const envID = meta.env_id !== undefined ? meta.env_id : "default";
+    return `${meta.user}-${envID}`;
+}
+
 function setUserFilter(value) {
     userFilter = new RegExp(value);
     activeSprites.forEach(obj => {
         container.removeChild(obj.subContainer); // Remove sprite from the scene
         obj.subContainer.destroy({ children: true }); // Optional: frees up memory used by the sprite
     });
-    activeSprites = []
+    activeSprites = [];
+    spriteCache.clear(); // Clear the cache as well
 }
 
 app.view.addEventListener('wheel', (e) => {
@@ -258,7 +275,7 @@ PIXI.Assets.load([
                 const path = data["coords"];
                 const meta = data["metadata"];
                 console.log(meta);
-                if (Date.now() - lastFrameTime < 2 * animationDuration) {
+                if (Date.now() - lastFrameTime < 2 * defaultAnimationDuration) {
                     startAnimationForPath(path, meta);
                 }
             }
@@ -278,8 +295,6 @@ PIXI.Assets.load([
 
     // Refresh WebSocket connection every 2 minutes (120000 milliseconds)
     setInterval(refreshWS, 120000);
-
-
 
     let baseTextureChar = new PIXI.BaseTexture("assets/characters_transparent.png", {
         scaleMode: PIXI.SCALE_MODES.NEAREST,
@@ -304,13 +319,15 @@ PIXI.Assets.load([
 
         // Check if meta is defined and has a 'user' key
         if (meta && meta.user !== undefined && typeof(meta.user) === "string") {
-            // Create a text label
             const envID = meta.env_id !== undefined ? `-${meta.env_id}` : "";
             const extraInfo = meta.extra !== undefined ? ` ${meta.extra}` : "";
             const color = (meta.color && CSS.supports('color', meta.color)) ? meta.color : "0x000000";
 
             const labelText = meta.user + envID + extraInfo;
             if (userFilter.exec(labelText) !== null) {
+                const cacheKey = getCacheKey(meta);
+                const currentTime = Date.now();
+
                 let spriteIdx = 0;
                 if (meta.sprite_id !== undefined) {
                     let parsed = parseInt(meta.sprite_id, 10);
@@ -318,37 +335,90 @@ PIXI.Assets.load([
                         spriteIdx = parsed;
                     }
                 }
-                const sprite = new PIXI.Sprite(textureCharsDown[spriteIdx]);
-                //sprite.x = charOffset * 40;
-                sprite.anchor.set(0.5);
-                //sprite.scale.set(0.5); // Adjust scale as needed
-                const subContainer = new PIXI.Container();
 
-                subContainer.addChild(sprite);
-                const label = new PIXI.Text(
-                    labelText,
-                    {
-                        fontFamily: 'Arial',
-                        fontSize: 14,
-                        fill: color,
-                        align: 'center',
-                });
-                label.x = sprite.x + sprite.width * 0.5; // Position the label next to the sprite
-                label.y -= sprite.height; // Adjust the label position as needed
-                subContainer.addChild(label);
-                container.addChild(subContainer);
+                // Check if sprite already exists in cache
+                if (spriteCache.has(cacheKey)) {
+                    const cached = spriteCache.get(cacheKey);
 
-                activeSprites.push({ subContainer, sprite, spriteIdx, path, startTime: null });
+                    // Calculate time since last update
+                    const timeSinceLastUpdate = currentTime - cached.lastUpdateTime;
+
+                    // Update moving average of batch timing
+                    cached.batchTimingAvg = updateMovingAverage(cached.batchTimingAvg, timeSinceLastUpdate);
+
+                    // Update the path and reset animation with dynamic duration
+                    cached.path = path;
+                    cached.startTime = null; // Reset to restart animation
+                    cached.lastUpdateTime = currentTime;
+                    cached.animationDuration = Math.max(1000, cached.batchTimingAvg * 0.95); // 95% of avg to finish slightly early
+
+                    // Update sprite index if it changed, preserving current direction
+                    if (cached.spriteIdx !== spriteIdx) {
+                        cached.spriteIdx = spriteIdx;
+                        // Update texture with new sprite ID but maintain direction
+                        const directionTextures = {
+                            'down': textureCharsDown,
+                            'up': textureCharsUp,
+                            'left': textureCharsLeft,
+                            'right': textureCharsRight
+                        };
+                        cached.sprite.texture = directionTextures[cached.currentDirection][spriteIdx];
+                    }
+
+                    // Update label text and color if changed
+                    if (cached.label) {
+                        cached.label.text = labelText;
+                        cached.label.style.fill = color;
+                    }
+                } else {
+                    // Create new sprite
+                    const sprite = new PIXI.Sprite(textureCharsDown[spriteIdx]);
+                    sprite.anchor.set(0.5);
+                    const subContainer = new PIXI.Container();
+
+                    subContainer.addChild(sprite);
+                    const label = new PIXI.Text(
+                        labelText,
+                        {
+                            fontFamily: 'Arial',
+                            fontSize: 14,
+                            fill: color,
+                            align: 'center',
+                    });
+                    label.x = sprite.x + sprite.width * 0.5;
+                    label.y -= sprite.height;
+                    subContainer.addChild(label);
+                    container.addChild(subContainer);
+
+                    // Initialize sprite in cache
+                    const newCachedSprite = {
+                        subContainer,
+                        sprite,
+                        label,
+                        spriteIdx,
+                        path,
+                        startTime: null,
+                        lastUpdateTime: currentTime,
+                        batchTimingAvg: null, // Will be set on second update
+                        animationDuration: defaultAnimationDuration,
+                        currentDirection: 'down'
+                    };
+
+                    spriteCache.set(cacheKey, newCachedSprite);
+                    activeSprites.push(newCachedSprite);
+                }
             }
         }
 
     }
 
     function animate(time) {
+        const currentTime = Date.now();
+
         activeSprites.forEach(obj => {
             if (!obj.startTime) obj.startTime = time;
             const timeDelta = time - obj.startTime;
-            const progress = Math.min(timeDelta / animationDuration, 1);
+            const progress = Math.min(timeDelta / obj.animationDuration, 1);
 
             // Calculate the current position
             const currentIndex = Math.floor(progress * (obj.path.length - 1));
@@ -365,33 +435,51 @@ PIXI.Assets.load([
                 const dx = nextPoint[0] - currentPoint[0];
                 const dy = nextPoint[1] - currentPoint[1];
 
-                // Determine which direction is dominant
-                if (Math.abs(dx) > Math.abs(dy)) {
-                    // Horizontal movement is dominant
-                    if (dx > 0) {
-                        obj.sprite.texture = textureCharsRight[obj.spriteIdx];
+                // Only update direction if there's actual movement
+                if (dx !== 0 || dy !== 0) {
+                    // Determine which direction is dominant
+                    let newDirection = obj.currentDirection;
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        // Horizontal movement is dominant
+                        if (dx > 0) {
+                            obj.sprite.texture = textureCharsRight[obj.spriteIdx];
+                            newDirection = 'right';
+                        } else {
+                            obj.sprite.texture = textureCharsLeft[obj.spriteIdx];
+                            newDirection = 'left';
+                        }
                     } else {
-                        obj.sprite.texture = textureCharsLeft[obj.spriteIdx];
+                        // Vertical movement is dominant
+                        if (dy > 0) {
+                            obj.sprite.texture = textureCharsDown[obj.spriteIdx];
+                            newDirection = 'down';
+                        } else {
+                            obj.sprite.texture = textureCharsUp[obj.spriteIdx];
+                            newDirection = 'up';
+                        }
                     }
-                } else {
-                    // Vertical movement is dominant
-                    if (dy > 0) {
-                        obj.sprite.texture = textureCharsDown[obj.spriteIdx];
-                    } else {
-                        obj.sprite.texture = textureCharsUp[obj.spriteIdx];
-                    }
+                    obj.currentDirection = newDirection;
                 }
             }
-
-            if (progress >= 1) {
-                container.removeChild(obj.subContainer); // Remove sprite from the scene
-                obj.subContainer.destroy({ children: true }); // Optional: frees up memory used by the sprite
-            }
-
         });
 
-        // Remove sprites that have completed their animation
-        activeSprites = activeSprites.filter(obj => (time - obj.startTime) < animationDuration);
+        // Clean up stale sprites 
+        const staleThreshold = 120000; // 2 minutes
+        const keysToRemove = [];
+
+        spriteCache.forEach((cached, key) => {
+            if (currentTime - cached.lastUpdateTime > staleThreshold) {
+                container.removeChild(cached.subContainer);
+                cached.subContainer.destroy({ children: true });
+                keysToRemove.push(key);
+            }
+        });
+
+        keysToRemove.forEach(key => spriteCache.delete(key));
+
+        // Update activeSprites to match spriteCache
+        activeSprites = Array.from(spriteCache.values());
+
         lastFrameTime = Date.now();
         requestAnimationFrame(animate);
     }
