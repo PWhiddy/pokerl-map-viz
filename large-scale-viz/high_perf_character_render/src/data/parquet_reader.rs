@@ -138,16 +138,11 @@ impl ParquetReader {
                 .column_by_name("sprite_id")
                 .context("Missing sprite_id column")?;
 
-            // sprite_id can be either Float64Array or Dictionary<Int8, Float64>
+            // sprite_id is a Dictionary<Int8, Float64 or String>
             let sprite_id_dict = sprite_id_col
                 .as_any()
                 .downcast_ref::<DictionaryArray<Int8Type>>()
                 .context("Invalid sprite_id column type")?;
-            let sprite_id_values = sprite_id_dict
-                .values()
-                .as_any()
-                .downcast_ref::<Float64Array>()
-                .context("Invalid sprite_id values type")?;
 
             // Skip color and extra - they're not used in extraction
 
@@ -205,7 +200,25 @@ impl ParquetReader {
                     0
                 } else {
                     let key = sprite_id_dict.key(i).context("Invalid sprite_id key")?;
-                    let sprite_id_raw = sprite_id_values.value(key as usize) as i32;
+                    let sprite_id_raw = if let Some(float_values) = sprite_id_dict
+                        .values()
+                        .as_any()
+                        .downcast_ref::<Float64Array>()
+                    {
+                        // Float64 values
+                        float_values.value(key as usize) as i32
+                    } else if let Some(string_values) = sprite_id_dict
+                        .values()
+                        .as_any()
+                        .downcast_ref::<StringArray>()
+                    {
+                        // String values - parse to int
+                        string_values.value(key as usize).parse::<i32>().unwrap_or(0)
+                    } else {
+                        // Unknown type, default to 0
+                        0
+                    };
+
                     if sprite_id_raw > 0 && sprite_id_raw < 50 {
                         sprite_id_raw as u8
                     } else {
