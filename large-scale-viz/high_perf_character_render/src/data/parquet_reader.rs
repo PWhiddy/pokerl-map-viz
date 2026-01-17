@@ -1,10 +1,10 @@
 use crate::data::sprite_data::{SpriteFrame, SpriteSequence};
 use anyhow::{Context, Result};
 use arrow::array::{
-    Array, ArrayRef, DictionaryArray, Float64Array, Int64Array, Int8Array, ListArray,
+    Array, DictionaryArray, Float64Array, Int64Array, ListArray,
     StringArray, TimestampNanosecondArray,
 };
-use arrow::datatypes::Int8Type;
+use arrow::datatypes::{Int8Type, Int16Type, Int32Type};
 use chrono::{DateTime, TimeZone, Utc};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use regex::Regex;
@@ -31,6 +31,62 @@ impl Default for ParquetFilter {
 
 pub struct ParquetReader {
     filter: ParquetFilter,
+}
+
+/// Helper to extract string from column that can be plain StringArray or Dictionary<Int8|Int16|Int32, String>
+fn get_dict_string(col: &dyn Array, row_idx: usize) -> Result<Option<String>> {
+
+    // Try plain StringArray first (non-dictionary encoded)
+    if let Some(arr) = col.as_any().downcast_ref::<StringArray>() {
+        if arr.is_null(row_idx) {
+            return Ok(None);
+        }
+        return Ok(Some(arr.value(row_idx).to_string()));
+    }
+
+    // Try Int8 dictionary
+    if let Some(dict) = col.as_any().downcast_ref::<DictionaryArray<Int8Type>>() {
+        if dict.is_null(row_idx) {
+            return Ok(None);
+        }
+        let key = dict.key(row_idx).context("Invalid dictionary key")?;
+        let values = dict
+            .values()
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .context("Invalid dictionary values type")?;
+        return Ok(Some(values.value(key as usize).to_string()));
+    }
+
+    // Try Int16 dictionary
+    if let Some(dict) = col.as_any().downcast_ref::<DictionaryArray<Int16Type>>() {
+        if dict.is_null(row_idx) {
+            return Ok(None);
+        }
+        let key = dict.key(row_idx).context("Invalid dictionary key")?;
+        let values = dict
+            .values()
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .context("Invalid dictionary values type")?;
+        return Ok(Some(values.value(key as usize).to_string()));
+    }
+
+    // Try Int32 dictionary
+    if let Some(dict) = col.as_any().downcast_ref::<DictionaryArray<Int32Type>>() {
+        if dict.is_null(row_idx) {
+            return Ok(None);
+        }
+        let key = dict.key(row_idx).context("Invalid dictionary key")?;
+        let values = dict
+            .values()
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .context("Invalid dictionary values type")?;
+        return Ok(Some(values.value(key as usize).to_string()));
+    }
+
+    anyhow::bail!("Column type: {:?}. Not a StringArray or Dictionary<Int8|Int16|Int32, String>", col.data_type())
 }
 
 impl ParquetReader {
@@ -77,15 +133,6 @@ impl ParquetReader {
             let env_id_col = batch
                 .column_by_name("env_id")
                 .context("Missing env_id column")?;
-            let env_id_dict = env_id_col
-                .as_any()
-                .downcast_ref::<DictionaryArray<arrow::datatypes::Int16Type>>()
-                .context("Invalid env_id column type")?;
-            let env_id_values = env_id_dict
-                .values()
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .context("Invalid env_id values type")?;
 
             let sprite_id_col = batch
                 .column_by_name("sprite_id")
@@ -102,25 +149,7 @@ impl ParquetReader {
                 .downcast_ref::<Float64Array>()
                 .context("Invalid sprite_id values type")?;
 
-            let color_col = batch
-                .column_by_name("color")
-                .context("Missing color column")?;
-            let color_dict = color_col
-                .as_any()
-                .downcast_ref::<DictionaryArray<Int8Type>>()
-                .context("Invalid color column type")?;
-            let color_values = color_dict
-                .values()
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .context("Invalid color values type")?;
-
-            let extra_col = batch
-                .column_by_name("extra")
-                .context("Missing extra column")?
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .context("Invalid extra column type")?;
+            // Skip color and extra - they're not used in extraction
 
             let coords_col = batch
                 .column_by_name("coords")
@@ -165,11 +194,10 @@ impl ParquetReader {
                 }
 
                 // Extract env_id - skip row if null
-                if env_id_dict.is_null(i) {
-                    continue;
-                }
-                let env_id_key = env_id_dict.key(i).context("Invalid env_id key")?;
-                let env_id = env_id_values.value(env_id_key as usize).to_string();
+                let env_id = match get_dict_string(env_id_col.as_ref(), i)? {
+                    Some(s) => s,
+                    None => continue,
+                };
 
                 // Extract sprite_id - match JS logic exactly:
                 // Default to 0, and only use value if > 0 and < 50
@@ -185,20 +213,7 @@ impl ParquetReader {
                     }
                 };
 
-                // Extract color (default to black if null)
-                let color = if color_dict.is_null(i) {
-                    "#000000".to_string()
-                } else {
-                    let color_key = color_dict.key(i).context("Invalid color key")?;
-                    color_values.value(color_key as usize).to_string()
-                };
-
-                // Extract extra
-                let extra = if extra_col.is_null(i) {
-                    String::new()
-                } else {
-                    extra_col.value(i).to_string()
-                };
+                // Skip color and extra - not used
 
                 // Extract coords - nested list structure
                 // Each row has a LIST of coordinates (a path)
@@ -241,8 +256,8 @@ impl ParquetReader {
                         user: user.clone(),
                         env_id: env_id.clone(),
                         sprite_id,
-                        color: color.clone(),
-                        extra: extra.clone(),
+                        color: String::new(), // Unused - placeholder
+                        extra: String::new(), // Unused - placeholder
                         coords,
                         path_index: coord_idx,
                     });
