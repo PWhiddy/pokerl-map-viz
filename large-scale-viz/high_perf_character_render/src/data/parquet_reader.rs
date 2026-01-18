@@ -120,29 +120,16 @@ impl ParquetReader {
             let user_col = batch
                 .column_by_name("user")
                 .context("Missing user column")?;
-            let user_dict = user_col
-                .as_any()
-                .downcast_ref::<DictionaryArray<Int8Type>>()
-                .context("Invalid user column type")?;
-            let user_values = user_dict
-                .values()
-                .as_any()
-                .downcast_ref::<StringArray>()
-                .context("Invalid user values type")?;
 
             let env_id_col = batch
                 .column_by_name("env_id")
                 .context("Missing env_id column")?;
 
-            let sprite_id_col = batch
+            // sprite_id column is optional - some files may not have it
+            // Default to 0 if missing
+            let sprite_id_dict_opt = batch
                 .column_by_name("sprite_id")
-                .context("Missing sprite_id column")?;
-
-            // sprite_id is a Dictionary<Int8, Float64 or String>
-            let sprite_id_dict = sprite_id_col
-                .as_any()
-                .downcast_ref::<DictionaryArray<Int8Type>>()
-                .context("Invalid sprite_id column type")?;
+                .and_then(|col| col.as_any().downcast_ref::<DictionaryArray<Int8Type>>());
 
             // Skip color and extra - they're not used in extraction
 
@@ -175,11 +162,10 @@ impl ParquetReader {
                 }
 
                 // Extract user - skip row if null
-                if user_dict.is_null(i) {
-                    continue;
-                }
-                let user_key = user_dict.key(i).context("Invalid user key")?;
-                let user = user_values.value(user_key as usize).to_string();
+                let user = match get_dict_string(user_col.as_ref(), i)? {
+                    Some(s) => s,
+                    None => continue,
+                };
 
                 // Apply user filter
                 if let Some(regex) = &self.filter.user_regex {
@@ -195,35 +181,40 @@ impl ParquetReader {
                 };
 
                 // Extract sprite_id - match JS logic exactly:
-                // Default to 0, and only use value if > 0 and < 50
-                let sprite_id = if sprite_id_dict.is_null(i) {
-                    0
-                } else {
-                    let key = sprite_id_dict.key(i).context("Invalid sprite_id key")?;
-                    let sprite_id_raw = if let Some(float_values) = sprite_id_dict
-                        .values()
-                        .as_any()
-                        .downcast_ref::<Float64Array>()
-                    {
-                        // Float64 values
-                        float_values.value(key as usize) as i32
-                    } else if let Some(string_values) = sprite_id_dict
-                        .values()
-                        .as_any()
-                        .downcast_ref::<StringArray>()
-                    {
-                        // String values - parse to int
-                        string_values.value(key as usize).parse::<i32>().unwrap_or(0)
-                    } else {
-                        // Unknown type, default to 0
+                // Default to 0 if column missing, null, or value out of range
+                let sprite_id = if let Some(sprite_id_dict) = sprite_id_dict_opt {
+                    if sprite_id_dict.is_null(i) {
                         0
-                    };
+                    } else {
+                        let key = sprite_id_dict.key(i).context("Invalid sprite_id key")?;
+                        let sprite_id_raw = if let Some(float_values) = sprite_id_dict
+                            .values()
+                            .as_any()
+                            .downcast_ref::<Float64Array>()
+                        {
+                            // Float64 values
+                            float_values.value(key as usize) as i32
+                        } else if let Some(string_values) = sprite_id_dict
+                            .values()
+                            .as_any()
+                            .downcast_ref::<StringArray>()
+                        {
+                            // String values - parse to int
+                            string_values.value(key as usize).parse::<i32>().unwrap_or(0)
+                        } else {
+                            // Unknown type, default to 0
+                            0
+                        };
 
-                    if sprite_id_raw > 0 && sprite_id_raw < 50 {
-                        sprite_id_raw as u8
-                    } else {
-                        0
+                        if sprite_id_raw > 0 && sprite_id_raw < 50 {
+                            sprite_id_raw as u8
+                        } else {
+                            0
+                        }
                     }
+                } else {
+                    // Column doesn't exist, default to 0
+                    0
                 };
 
                 // Skip color and extra - not used
