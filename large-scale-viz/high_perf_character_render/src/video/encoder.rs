@@ -1,83 +1,116 @@
 use anyhow::{Context, Result};
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, Command, Stdio};
 
 pub struct ProResEncoder {
-    ffmpeg_process: Child,
-    stdin: Option<ChildStdin>,
+    rgb_process: Child,
+    mask_process: Child,
+    rgb_stdin: Option<ChildStdin>,
+    mask_stdin: Option<ChildStdin>,
     width: u32,
     height: u32,
-    fps: u32,
+    rgb_buffer: Vec<u8>,
+    mask_buffer: Vec<u8>,
 }
 
 impl ProResEncoder {
-    /// Create a new ProRes 4444 encoder that streams to a file
+    /// Create a new dual H.264 encoder (RGB + mask) that streams to two files
     pub fn new<P: AsRef<Path>>(
         output_path: P,
         width: u32,
         height: u32,
         fps: u32,
     ) -> Result<Self> {
-        log::info!(
-            "Starting FFmpeg encoder: {}x{} @ {} fps -> {:?}",
-            width,
-            height,
-            fps,
-            output_path.as_ref()
-        );
+        let output_path = output_path.as_ref();
 
-        // Build ffmpeg command
-        // Input: raw RGBA frames from stdin
-        // Output: ProRes 4444 with alpha channel
-        let mut ffmpeg_process = Command::new("ffmpeg")
+        // Create two output paths: _rgb.mp4 and _mask.mp4
+        let mut rgb_path = PathBuf::from(output_path);
+        let mut mask_path = PathBuf::from(output_path);
+
+        let stem = output_path.file_stem().unwrap().to_str().unwrap();
+        rgb_path.set_file_name(format!("{}_rgb.mp4", stem));
+        mask_path.set_file_name(format!("{}_mask.mp4", stem));
+
+        log::info!(
+            "Starting dual H.264 encoders: {}x{} @ {} fps",
+            width, height, fps
+        );
+        log::info!("  RGB output: {:?}", rgb_path);
+        log::info!("  Mask output: {:?}", mask_path);
+
+        // Build RGB encoder (H.264, high quality)
+        let mut rgb_process = Command::new("ffmpeg")
             .args(&[
-                "-y", // Overwrite output file
-                "-f",
-                "rawvideo",
-                "-pixel_format",
-                "rgba",
-                "-video_size",
-                &format!("{}x{}", width, height),
-                "-framerate",
-                &format!("{}", fps),
-                "-i",
-                "pipe:0", // Read from stdin
-                "-threads",
-                "8", // Use 8 threads for encoding
-                "-max_muxing_queue_size",
-                "16", // Small muxing queue to limit buffering
-                "-c:v",
-                "prores_ks", // ProRes encoder
-                "-profile:v",
-                "4444", // ProRes 4444 with alpha
-                "-pix_fmt",
-                "yuva444p10le", // Pixel format with alpha
-                "-vendor",
-                "apl0", // Apple vendor ID
-                output_path.as_ref().to_str().unwrap(),
+                "-y",
+                "-f", "rawvideo",
+                "-pixel_format", "rgb24",
+                "-video_size", &format!("{}x{}", width, height),
+                "-framerate", &format!("{}", fps),
+                "-i", "pipe:0",
+                "-c:v", "libx264",
+                "-preset", "slow",
+                "-crf", "15", // Near-lossless quality (comparable to ProRes 4444)
+                "-pix_fmt", "yuv444p", // 4:4:4 chroma subsampling for max quality
+                "-threads", "8",
+                rgb_path.to_str().unwrap(),
             ])
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::inherit())
             .spawn()
-            .context("Failed to spawn ffmpeg process")?;
+            .context("Failed to spawn RGB encoder")?;
 
-        let stdin = ffmpeg_process
+        // Build mask encoder (H.264, grayscale)
+        let mut mask_process = Command::new("ffmpeg")
+            .args(&[
+                "-y",
+                "-f", "rawvideo",
+                "-pixel_format", "gray",
+                "-video_size", &format!("{}x{}", width, height),
+                "-framerate", &format!("{}", fps),
+                "-i", "pipe:0",
+                "-c:v", "libx264",
+                "-preset", "slow",
+                "-crf", "15",
+                "-pix_fmt", "yuv420p",
+                "-threads", "8",
+                mask_path.to_str().unwrap(),
+            ])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .context("Failed to spawn mask encoder")?;
+
+        let rgb_stdin = rgb_process
             .stdin
             .take()
-            .context("Failed to open ffmpeg stdin")?;
+            .context("Failed to open RGB encoder stdin")?;
+
+        let mask_stdin = mask_process
+            .stdin
+            .take()
+            .context("Failed to open mask encoder stdin")?;
+
+        let pixel_count = (width * height) as usize;
+        let rgb_buffer = vec![0u8; pixel_count * 3];
+        let mask_buffer = vec![0u8; pixel_count];
 
         Ok(Self {
-            ffmpeg_process,
-            stdin: Some(stdin),
+            rgb_process,
+            mask_process,
+            rgb_stdin: Some(rgb_stdin),
+            mask_stdin: Some(mask_stdin),
             width,
             height,
-            fps,
+            rgb_buffer,
+            mask_buffer,
         })
     }
 
     /// Write a single frame (RGBA8, row-major, top-to-bottom)
+    /// Splits into RGB and alpha mask streams
     pub fn write_frame(&mut self, frame_data: &[u8]) -> Result<()> {
         let expected_size = (self.width * self.height * 4) as usize;
         if frame_data.len() != expected_size {
@@ -88,41 +121,79 @@ impl ProResEncoder {
             );
         }
 
-        if let Some(stdin) = &mut self.stdin {
-            stdin
-                .write_all(frame_data)
-                .context("Failed to write frame to ffmpeg")?;
-            Ok(())
-        } else {
-            anyhow::bail!("Encoder stdin is closed")
+        // Split RGBA into RGB and alpha channels
+        let pixel_count = (self.width * self.height) as usize;
+
+        for i in 0..pixel_count {
+            let rgba_idx = i * 4;
+            let rgb_idx = i * 3;
+
+            // RGB channels
+            self.rgb_buffer[rgb_idx] = frame_data[rgba_idx];
+            self.rgb_buffer[rgb_idx + 1] = frame_data[rgba_idx + 1];
+            self.rgb_buffer[rgb_idx + 2] = frame_data[rgba_idx + 2];
+
+            // Alpha channel
+            self.mask_buffer[i] = frame_data[rgba_idx + 3];
         }
+
+        // Write RGB frame
+        if let Some(stdin) = &mut self.rgb_stdin {
+            stdin
+                .write_all(&self.rgb_buffer)
+                .context("Failed to write RGB frame to ffmpeg")?;
+        } else {
+            anyhow::bail!("RGB encoder stdin is closed")
+        }
+
+        // Write mask frame
+        if let Some(stdin) = &mut self.mask_stdin {
+            stdin
+                .write_all(&self.mask_buffer)
+                .context("Failed to write mask frame to ffmpeg")?;
+        } else {
+            anyhow::bail!("Mask encoder stdin is closed")
+        }
+
+        Ok(())
     }
 
-    /// Finish encoding and close the file
+    /// Finish encoding and close both files
     pub fn finish(mut self) -> Result<()> {
         log::info!("Finalizing video encoding...");
 
         // Close stdin to signal end of input
-        drop(self.stdin.take());
+        drop(self.rgb_stdin.take());
+        drop(self.mask_stdin.take());
 
-        // Wait for ffmpeg to finish
-        let status = self
-            .ffmpeg_process
+        // Wait for both encoders to finish
+        let rgb_status = self
+            .rgb_process
             .wait()
-            .context("Failed to wait for ffmpeg process")?;
+            .context("Failed to wait for RGB encoder")?;
 
-        if status.success() {
-            log::info!("Video encoding completed successfully");
+        let mask_status = self
+            .mask_process
+            .wait()
+            .context("Failed to wait for mask encoder")?;
+
+        if rgb_status.success() && mask_status.success() {
+            log::info!("Both video encodings completed successfully");
             Ok(())
         } else {
-            anyhow::bail!("FFmpeg exited with error: {:?}", status);
+            anyhow::bail!(
+                "FFmpeg exited with errors - RGB: {:?}, Mask: {:?}",
+                rgb_status,
+                mask_status
+            );
         }
     }
 }
 
 impl Drop for ProResEncoder {
     fn drop(&mut self) {
-        // Try to terminate ffmpeg if it's still running
-        let _ = self.ffmpeg_process.kill();
+        // Try to terminate both encoders if they're still running
+        let _ = self.rgb_process.kill();
+        let _ = self.mask_process.kill();
     }
 }
