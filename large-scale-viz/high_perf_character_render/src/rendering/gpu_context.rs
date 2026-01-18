@@ -31,6 +31,8 @@ impl GpuContext {
 
         log::info!("Using GPU: {:?}", adapter.get_info());
 
+        let max_buffer_size = adapter.limits().max_buffer_size;
+
         let (device, queue) = adapter
             .request_device(
                 &wgpu::DeviceDescriptor {
@@ -38,6 +40,7 @@ impl GpuContext {
                     required_features: wgpu::Features::empty(),
                     required_limits: wgpu::Limits {
                         max_texture_dimension_2d: 8192,
+                        max_buffer_size,
                         ..Default::default()
                     },
                     memory_hints: Default::default(),
