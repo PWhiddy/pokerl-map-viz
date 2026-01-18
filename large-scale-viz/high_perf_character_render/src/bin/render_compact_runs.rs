@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use sprite_video_renderer::data::CoordinateMapper;
+use sprite_video_renderer::data::{CoordinateMapper, INVALID_MAP_ID_FLAG};
 use sprite_video_renderer::rendering::{GpuContext, SpriteInstance, SpriteRenderer, TextureAtlas};
 use sprite_video_renderer::video::ProResEncoder;
 use std::fs::File;
@@ -59,10 +59,18 @@ struct CompactCoord {
     map_id: u16,
 }
 
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
+struct UltraCompactCoordMem {
+    x: u8,
+    y: u8,
+    map_id: u8,
+}
+
 #[derive(Debug)]
 struct CompactRun {
     sprite_id: u8,
-    coords: Vec<CompactCoord>,
+    coords: Vec<UltraCompactCoordMem>,
 }
 
 fn main() -> Result<()> {
@@ -169,6 +177,11 @@ async fn run() -> Result<()> {
             // Convert to pixel positions
             let current_pos = coordinate_mapper.convert_coords(&current_coords);
             let next_pos = coordinate_mapper.convert_coords(&next_coords);
+
+            // map id doesn't exist! (probably transitioning between world)
+            if current_pos == INVALID_MAP_ID_FLAG || next_pos == INVALID_MAP_ID_FLAG {
+                continue;
+            }
 
             // Check pixel distance - only interpolate if moving <= 16 pixels (1 tile)
             let pixel_dx = (next_pos[0] - current_pos[0]).abs();
@@ -290,7 +303,9 @@ fn load_compact_runs(path: &PathBuf) -> Result<Vec<CompactRun>> {
     let mut runs = Vec::new();
     let mut buffer = vec![0u8; 1024 * 1024]; // 1MB buffer for reading
 
-    loop {
+    let mut skipped_runs: u32 = 0;
+
+    'runs_loop: loop {
         // Read sprite_id
         let mut sprite_id_buf = [0u8; 1];
         match reader.read_exact(&mut sprite_id_buf) {
@@ -319,13 +334,36 @@ fn load_compact_runs(path: &PathBuf) -> Result<Vec<CompactRun>> {
             let coord = unsafe {
                 std::ptr::read_unaligned(buffer[offset..].as_ptr() as *const CompactCoord)
             };
-            coords.push(coord);
+            let x = coord.x;
+            let y = coord.y;
+            let map_id = coord.map_id;
+            if x > u8::MAX as u16 {
+                //log::error!("got x coord with value: {}", x);
+                skipped_runs += 1;
+                continue 'runs_loop;
+            }
+            if y > u8::MAX as u16 {
+                //log::error!("got y coord with value: {}", y);
+                skipped_runs += 1;
+                continue 'runs_loop;
+            }
+            if map_id > u8::MAX as u16 {
+                //log::error!("got map_id with value: {}", map_id);
+                skipped_runs += 1;
+                continue 'runs_loop;
+            }
+            let packy_coords = UltraCompactCoordMem {
+                x: x as u8,
+                y: y as u8,
+                map_id: map_id as u8,
+            };
+            coords.push(packy_coords);
         }
 
         runs.push(CompactRun { sprite_id, coords });
 
         if runs.len() % 100000 == 0 {
-            log::info!("Loaded {} runs...", runs.len());
+            log::info!("Loaded {} runs, skipped {}...", runs.len(), skipped_runs);
         }
     }
 

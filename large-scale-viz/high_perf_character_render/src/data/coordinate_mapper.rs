@@ -30,6 +30,8 @@ pub struct CoordinateMapper {
     regions: HashMap<i64, MapRegion>,
 }
 
+pub const INVALID_MAP_ID_FLAG: [f32; 2] = [117117.0, 117117.0];
+
 impl CoordinateMapper {
     /// Load map data from JSON file
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
@@ -71,7 +73,7 @@ impl CoordinateMapper {
             [x, y]
         } else {
             log::warn!("No map coordinate location for id: {}", map_region_id);
-            [4096.0, 4096.0] // Center of canvas if no region found
+            INVALID_MAP_ID_FLAG // invalid for example 255 is seen sometimes
         }
     }
 }
