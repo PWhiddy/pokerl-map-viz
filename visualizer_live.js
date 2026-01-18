@@ -269,7 +269,7 @@ PIXI.Assets.load([
             const data = JSON.parse(event.data); // Assuming the data is JSON-encoded
             if ("stats" in data) {
                 curStats = data["stats"];
-                document.getElementById('envsCount').innerText = `${curStats.envs} Environments Streaming`;
+                document.getElementById('envsCount').innerText = `${spriteCache.size} Environments Streaming`;
                 document.getElementById('viewersCount').innerText = `${curStats.viewers} Viewers Connected`;
             } else {
                 const path = data["coords"];
