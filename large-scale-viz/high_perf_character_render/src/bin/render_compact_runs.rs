@@ -184,12 +184,12 @@ async fn run() -> Result<()> {
                 continue;
             }
 
-            // Check pixel distance - only interpolate if moving <= 16 pixels (1 tile)
+            // Check pixel distance - only interpolate if moving <= 4*16 pixels (4 tiles)
             let pixel_dx = (next_pos[0] - current_pos[0]).abs();
             let pixel_dy = (next_pos[1] - current_pos[1]).abs();
             let pixel_distance = pixel_dx.max(pixel_dy);
 
-            let should_interpolate = pixel_distance <= 16.0;
+            let should_interpolate = pixel_distance <= 4.0 * 16.0;
             let interp_t = if should_interpolate { interpolation_t } else { 0.0 };
 
             // Interpolate position
