@@ -90,7 +90,12 @@ impl TextureAtlas {
     /// Get texture coordinates for a sprite
     /// Formula from JS: sx = 9 + 17 * x, sy = 34 + 17 * y, width = 16, height = 16
     pub fn get_sprite_tex_coords(&self, sprite_id: u8, direction: Direction) -> [f32; 4] {
-        let x = direction.column_index();
+        let short_sprite_rows = [2, 5, 13, 14, 15, 18, 21, 24, 25, 29, 31, 32, 33, 39, 41, 42, 48, 49, 50];
+        let x = if short_sprite_rows.contains(&sprite_id) {
+            direction.column_index_short()
+        } else {
+            direction.column_index()
+        };
         let y = sprite_id as usize;
 
         let sx = 9.0 + 17.0 * x as f32;

@@ -19,6 +19,15 @@ impl Direction {
         }
     }
 
+    pub fn column_index_short(&self) -> usize {
+        match self {
+            Direction::Down => 0,
+            Direction::Up => 1,
+            Direction::Left => 2,
+            Direction::Right => 3,
+        }
+    }
+
     /// Determine direction based on movement delta
     pub fn from_movement(dx: f32, dy: f32) -> Self {
         if dx.abs() > dy.abs() {

@@ -6,6 +6,7 @@ use sprite_video_renderer::video::ProResEncoder;
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::PathBuf;
+use std::collections::HashSet;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about = "Render compact runs to video", long_about = None)]
@@ -215,7 +216,8 @@ async fn run() -> Result<()> {
             // else: no movement, keep the stored direction
 
             // Get texture coordinates
-            let tex_coords = texture_atlas.get_sprite_tex_coords(run.sprite_id, run_directions[run_idx]);
+            let sprite_index_capped = run.sprite_id.min(54);
+            let tex_coords = texture_atlas.get_sprite_tex_coords(sprite_index_capped, run_directions[run_idx]);
 
             sprite_instances.push(SpriteInstance {
                 position,
@@ -304,6 +306,7 @@ fn load_compact_runs(path: &PathBuf) -> Result<Vec<CompactRun>> {
     let mut buffer = vec![0u8; 1024 * 1024]; // 1MB buffer for reading
 
     let mut skipped_runs: u32 = 0;
+    let mut all_sprite_ids = HashSet::new();
 
     'runs_loop: loop {
         // Read sprite_id
@@ -314,6 +317,7 @@ fn load_compact_runs(path: &PathBuf) -> Result<Vec<CompactRun>> {
             Err(e) => return Err(e.into()),
         }
         let sprite_id = sprite_id_buf[0];
+        all_sprite_ids.insert(sprite_id);
 
         // Read coord_count
         let mut count_buf = [0u8; 2];
@@ -363,7 +367,7 @@ fn load_compact_runs(path: &PathBuf) -> Result<Vec<CompactRun>> {
         runs.push(CompactRun { sprite_id, coords });
 
         if runs.len() % 100000 == 0 {
-            log::info!("Loaded {} runs, skipped {}...", runs.len(), skipped_runs);
+            log::info!("Loaded {} runs, skipped {} ", runs.len(), skipped_runs);
         }
     }
 
