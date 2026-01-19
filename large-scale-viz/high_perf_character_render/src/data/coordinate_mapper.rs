@@ -72,7 +72,7 @@ impl CoordinateMapper {
 
             [x, y]
         } else {
-            log::warn!("No map coordinate location for id: {}", map_region_id);
+            log::debug!("No map coordinate location for id: {}", map_region_id);
             INVALID_MAP_ID_FLAG // invalid for example 255 is seen sometimes
         }
     }

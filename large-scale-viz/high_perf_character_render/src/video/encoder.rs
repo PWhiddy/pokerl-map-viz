@@ -50,7 +50,7 @@ impl ProResEncoder {
                 "-i", "pipe:0",
                 "-c:v", "libx264",
                 "-preset", "slow",
-                "-crf", "15", // Near-lossless quality (comparable to ProRes 4444)
+                "-crf", "12", // Near-lossless quality (comparable to ProRes 4444)
                 "-pix_fmt", "yuv444p", // 4:4:4 chroma subsampling for max quality
                 "-threads", "8",
                 rgb_path.to_str().unwrap(),
