@@ -225,7 +225,15 @@ async fn run() -> Result<()> {
             // else: no movement, keep the stored direction
 
             // Get texture coordinates
-            let sprite_index_capped = run.sprite_id.min(54);
+
+            let are_we_biking_on_route_17 = current_coord.map_id == 28 || next_coord.map_id == 28;
+
+            let sprite_index_capped = if are_we_biking_on_route_17 {
+                1
+            } else {
+                run.sprite_id.min(54)
+            };
+
             let tex_coords = texture_atlas.get_sprite_tex_coords(sprite_index_capped, run_directions[run_idx]);
 
             sprite_instances.push(SpriteInstance {
