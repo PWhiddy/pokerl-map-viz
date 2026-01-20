@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
+use rand::Rng;
 use sprite_video_renderer::data::{CoordinateMapper, INVALID_MAP_ID_FLAG};
 use sprite_video_renderer::rendering::{GpuContext, SpriteInstance, SpriteRenderer, TextureAtlas};
 use sprite_video_renderer::video::ProResEncoder;
@@ -147,6 +148,13 @@ async fn run() -> Result<()> {
     let mut run_directions: Vec<sprite_video_renderer::data::Direction> =
         vec![sprite_video_renderer::data::Direction::Down; runs.len()];
 
+    // Generate random offsets [0, 1) for each run to desync their animations
+    let mut rng = rand::thread_rng();
+    let run_offsets: Vec<f32> = (0..runs.len())
+        .map(|_| rng.gen::<f32>())
+        .collect();
+    log::info!("Generated random offsets for {} runs", run_offsets.len());
+
     // Render frames
     log::info!("Rendering {} frames...", total_frames);
     let start_time = std::time::Instant::now();
@@ -158,15 +166,16 @@ async fn run() -> Result<()> {
         let mut sprite_instances = Vec::new();
 
         for (run_idx, run) in runs.iter().enumerate() {
-            // Calculate which coord index we're at (using all coords, just faster)
-            let coord_index = (time_ms / effective_interval_ms) as usize;
+            // Calculate which coord index we're at (with random offset for desyncing)
+            let progress = (time_ms / effective_interval_ms) + run_offsets[run_idx];
+            let coord_index = progress as usize;
 
             if coord_index >= run.coords.len() {
                 continue; // This run has finished
             }
 
             let next_index = (coord_index + 1).min(run.coords.len() - 1);
-            let interpolation_t = (time_ms / effective_interval_ms).fract();
+            let interpolation_t = progress.fract();
 
             let current_coord = &run.coords[coord_index];
             let next_coord = &run.coords[next_index];

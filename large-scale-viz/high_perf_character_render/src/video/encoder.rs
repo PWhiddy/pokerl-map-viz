@@ -29,17 +29,17 @@ impl ProResEncoder {
         let mut mask_path = PathBuf::from(output_path);
 
         let stem = output_path.file_stem().unwrap().to_str().unwrap();
-        rgb_path.set_file_name(format!("{}_rgb.mp4", stem));
-        mask_path.set_file_name(format!("{}_mask.mp4", stem));
+        rgb_path.set_file_name(format!("{}_rgb.mov", stem));
+        mask_path.set_file_name(format!("{}_mask.mov", stem));
 
         log::info!(
-            "Starting dual H.264 encoders: {}x{} @ {} fps",
+            "Starting dual ProRes 422 HQ encoders: {}x{} @ {} fps",
             width, height, fps
         );
         log::info!("  RGB output: {:?}", rgb_path);
         log::info!("  Mask output: {:?}", mask_path);
 
-        // Build RGB encoder (H.264, high quality)
+        // Build RGB encoder (ProRes 422 HQ)
         let mut rgb_process = Command::new("ffmpeg")
             .args(&[
                 "-y",
@@ -48,10 +48,10 @@ impl ProResEncoder {
                 "-video_size", &format!("{}x{}", width, height),
                 "-framerate", &format!("{}", fps),
                 "-i", "pipe:0",
-                "-c:v", "libx264",
-                "-preset", "slow",
-                "-crf", "12", // Near-lossless quality (comparable to ProRes 4444)
-                "-pix_fmt", "yuv444p", // 4:4:4 chroma subsampling for max quality
+                "-c:v", "prores_ks",
+                "-profile:v", "3", // ProRes 422 HQ
+                "-pix_fmt", "yuv422p10le",
+                "-vendor", "apl0",
                 "-threads", "8",
                 rgb_path.to_str().unwrap(),
             ])
@@ -61,7 +61,7 @@ impl ProResEncoder {
             .spawn()
             .context("Failed to spawn RGB encoder")?;
 
-        // Build mask encoder (H.264, grayscale)
+        // Build mask encoder (ProRes 422 HQ, grayscale)
         let mut mask_process = Command::new("ffmpeg")
             .args(&[
                 "-y",
@@ -70,10 +70,10 @@ impl ProResEncoder {
                 "-video_size", &format!("{}x{}", width, height),
                 "-framerate", &format!("{}", fps),
                 "-i", "pipe:0",
-                "-c:v", "libx264",
-                "-preset", "slow",
-                "-crf", "15",
-                "-pix_fmt", "yuv420p",
+                "-c:v", "prores_ks",
+                "-profile:v", "3", // ProRes 422 HQ
+                "-pix_fmt", "yuv422p10le",
+                "-vendor", "apl0",
                 "-threads", "8",
                 mask_path.to_str().unwrap(),
             ])
