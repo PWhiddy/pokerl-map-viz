@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::Parser;
-use sprite_video_renderer::data::{ParquetFilter, ParquetReader};
+use sprite_video_renderer::data::{ParquetFilter, CoordinateMapper, ParquetReader};
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
@@ -96,6 +96,8 @@ fn main() -> Result<()> {
         log::info!("Loaded progress: {} files already processed", processed_files.len());
     }
 
+    let coordinate_mapper = CoordinateMapper::load("../../assets/map_data.json").unwrap();
+
     // Open output file in append mode
     let mut output_file = BufWriter::new(
         OpenOptions::new()
@@ -113,7 +115,7 @@ fn main() -> Result<()> {
     );
 
     let mut total_runs_extracted = 0;
-    let starting_maps = vec![0i64, 37, 40, 39, 38];
+    let starting_maps = vec![0i64, 37, 40, 38];
     let starting_and_adjacent_maps = vec![0i64, 37, 40, 39, 38, 12, 32];
     let gap_threshold = Duration::minutes(2);
     let min_duration = Duration::seconds(args.min_duration_secs);
@@ -179,13 +181,26 @@ fn main() -> Result<()> {
                 let curr_map = frames[j].coords[2];
                 let prev_map = frames[j-1].coords[2];
 
-                let should_split = time_gap >= gap_threshold
+                //////////////////////////
+                let current_coord = frames[j].coords.map(|x| x as i64);
+                let previous_coord = frames[j-1].coords.map(|x| x as i64);
+
+                // Convert to pixel positions
+                let current_global_pos = coordinate_mapper.convert_coords(&current_coord);
+                let previous_global_pos = coordinate_mapper.convert_coords(&previous_coord);
+                let dx = current_global_pos[0] - previous_global_pos[0];
+                let dy = current_global_pos[1] - previous_global_pos[1];
+                let global_step_delta = (dx*dx + dy*dy).sqrt();
+                let early_big_jump_fail = args.pallet_start_only && (j as i64 - run_start as i64) < 140 && global_step_delta > 30.0;
+                ///////////////
+
+                let should_split = time_gap >= gap_threshold || early_big_jump_fail
                     || (starting_maps.contains(&curr_map) && !starting_and_adjacent_maps.contains(&prev_map));
 
                 if should_split {
                     let duration = frames[j-1].timestamp - frames[run_start].timestamp;
                     let pallet_start_ok = if args.pallet_start_only { starting_maps.contains(&frames[run_start].coords[2]) } else { true };
-                    if duration >= min_duration && pallet_start_ok {
+                    if duration >= min_duration && pallet_start_ok && !early_big_jump_fail {
                         // Write this run
                         write_compact_run(
                             &mut output_file,
@@ -205,6 +220,7 @@ fn main() -> Result<()> {
             if run_start < user_env_end {
                 let duration = frames[user_env_end - 1].timestamp - frames[run_start].timestamp;
                 let pallet_start_ok = if args.pallet_start_only { starting_maps.contains(&frames[run_start].coords[2]) } else { true };
+                
                 if duration >= min_duration && pallet_start_ok {
                     write_compact_run(
                         &mut output_file,
