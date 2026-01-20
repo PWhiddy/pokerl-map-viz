@@ -53,6 +53,8 @@ struct Args {
     max_frames: Option<usize>,
 }
 
+/*
+//use this to read old data
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 struct CompactCoord {
@@ -60,6 +62,7 @@ struct CompactCoord {
     y: u16,
     map_id: u16,
 }
+*/
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
@@ -342,7 +345,7 @@ fn load_compact_runs(path: &PathBuf) -> Result<Vec<CompactRun>> {
         let coord_count = u16::from_le_bytes(count_buf) as usize;
 
         // Read coords
-        let bytes_to_read = coord_count * std::mem::size_of::<CompactCoord>();
+        let bytes_to_read = coord_count * std::mem::size_of::<UltraCompactCoordMem>();
         if buffer.len() < bytes_to_read {
             buffer.resize(bytes_to_read, 0);
         }
@@ -351,10 +354,12 @@ fn load_compact_runs(path: &PathBuf) -> Result<Vec<CompactRun>> {
 
         let mut coords = Vec::with_capacity(coord_count);
         for i in 0..coord_count {
-            let offset = i * std::mem::size_of::<CompactCoord>();
+            let offset = i * std::mem::size_of::<UltraCompactCoordMem>();
             let coord = unsafe {
-                std::ptr::read_unaligned(buffer[offset..].as_ptr() as *const CompactCoord)
+                std::ptr::read_unaligned(buffer[offset..].as_ptr() as *const UltraCompactCoordMem)
             };
+            coords.push(coord);
+            /* 
             let x = coord.x;
             let y = coord.y;
             let map_id = coord.map_id;
@@ -379,6 +384,7 @@ fn load_compact_runs(path: &PathBuf) -> Result<Vec<CompactRun>> {
                 map_id: map_id as u8,
             };
             coords.push(packy_coords);
+            */
         }
 
         runs.push(CompactRun { sprite_id, coords });

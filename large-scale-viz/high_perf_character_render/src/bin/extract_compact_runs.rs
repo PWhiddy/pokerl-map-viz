@@ -22,20 +22,40 @@ struct Args {
     progress_file: PathBuf,
 
     /// Minimum run duration in seconds
+    /// 60 secs might be around 1200 steps.
+    /// for longer run we should do at least 240 seconds
     #[arg(long, default_value = "60")]
     min_duration_secs: i64,
 
     /// Maximum coordinates per run
+    // this gets converted to u16 so 2^16 is max safe value! 
+    // 65528 <- safe value with 8 padding
+    // lets try 32768
     #[arg(long, default_value = "2000")]
     max_coords_per_run: usize,
+
+    #[arg(long)]
+    pallet_start_only: bool,
+
 }
 
+/*
+// original, bigger than needed
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 struct CompactCoord {
     x: u16,
     y: u16,
     map_id: u16,
+}
+*/
+
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
+struct UltraCompactCoord {
+    x: u8,
+    y: u8,
+    map_id: u8,
 }
 
 fn main() -> Result<()> {
@@ -93,7 +113,8 @@ fn main() -> Result<()> {
     );
 
     let mut total_runs_extracted = 0;
-    let reset_maps = vec![0i64, 37, 40];
+    let starting_maps = vec![0i64, 37, 40, 39, 38];
+    let starting_and_adjacent_maps = vec![0i64, 37, 40, 39, 38, 12, 32];
     let gap_threshold = Duration::minutes(2);
     let min_duration = Duration::seconds(args.min_duration_secs);
 
@@ -159,12 +180,12 @@ fn main() -> Result<()> {
                 let prev_map = frames[j-1].coords[2];
 
                 let should_split = time_gap >= gap_threshold
-                    || (reset_maps.contains(&curr_map) && !reset_maps.contains(&prev_map));
+                    || (starting_maps.contains(&curr_map) && !starting_and_adjacent_maps.contains(&prev_map));
 
                 if should_split {
                     let duration = frames[j-1].timestamp - frames[run_start].timestamp;
-
-                    if duration >= min_duration {
+                    let pallet_start_ok = if args.pallet_start_only { starting_maps.contains(&frames[run_start].coords[2]) } else { true };
+                    if duration >= min_duration && pallet_start_ok {
                         // Write this run
                         write_compact_run(
                             &mut output_file,
@@ -183,8 +204,8 @@ fn main() -> Result<()> {
             // Final run
             if run_start < user_env_end {
                 let duration = frames[user_env_end - 1].timestamp - frames[run_start].timestamp;
-
-                if duration >= min_duration {
+                let pallet_start_ok = if args.pallet_start_only { starting_maps.contains(&frames[run_start].coords[2]) } else { true };
+                if duration >= min_duration && pallet_start_ok {
                     write_compact_run(
                         &mut output_file,
                         run_sprite_id,
@@ -238,16 +259,25 @@ fn write_compact_run<W: Write>(
 
     // Write coords
     for frame in frames.iter().take(max_coords) {
-        let compact = CompactCoord {
-            x: frame.coords[0] as u16,
-            y: frame.coords[1] as u16,
-            map_id: frame.coords[2] as u16,
+
+        // flag out invalid map id or coordinates
+        let compact = match (
+            u8::try_from(frame.coords[0]),
+            u8::try_from(frame.coords[1]),
+            u8::try_from(frame.coords[2]),
+        ) {
+            (Ok(x), Ok(y), Ok(map_id)) => UltraCompactCoord { x, y, map_id },
+            _ => UltraCompactCoord {
+                x: 0,
+                y: 0,
+                map_id: 255,
+            },
         };
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
-                &compact as *const CompactCoord as *const u8,
-                std::mem::size_of::<CompactCoord>(),
+                &compact as *const UltraCompactCoord as *const u8,
+                std::mem::size_of::<UltraCompactCoord>(),
             )
         };
 
