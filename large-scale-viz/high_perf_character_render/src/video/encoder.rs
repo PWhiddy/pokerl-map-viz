@@ -33,13 +33,13 @@ impl ProResEncoder {
         mask_path.set_file_name(format!("{}_mask.mov", stem));
 
         log::info!(
-            "Starting dual ProRes 422 HQ encoders: {}x{} @ {} fps",
+            "Starting dual encoders: {}x{} @ {} fps",
             width, height, fps
         );
         log::info!("  value output: {:?}", value_path);
         log::info!("  Mask output: {:?}", mask_path);
 
-        // Build value encoder (ProRes 422 HQ)
+        // Build value encoder
         let mut value_process = Command::new("ffmpeg")
             .args(&[
                 "-y",
@@ -48,10 +48,18 @@ impl ProResEncoder {
                 "-video_size", &format!("{}x{}", width, height),
                 "-framerate", &format!("{}", fps),
                 "-i", "pipe:0",
-                "-c:v", "prores_ks",
-                "-profile:v", "3", // ProRes 422 HQ
-                "-pix_fmt", "yuv422p10le",
-                "-vendor", "apl0",
+                "-c:v", "hevc_nvenc",
+                "-profile:v", "main10",
+                "-pix_fmt", "yuv420p10le",
+                "-g", "1", // All-Intra
+                "-bf", "0",
+                "-preset", "p6",
+                "-rc", "constqp",
+                "-qp", "12", 
+                "-spatial_aq", "0",
+                "-temporal_aq", "0",
+
+                "-movflags", "+faststart",
                 "-threads", "12",
                 value_path.to_str().unwrap(),
             ])
@@ -61,7 +69,7 @@ impl ProResEncoder {
             .spawn()
             .context("Failed to spawn value encoder")?;
 
-        // Build mask encoder (ProRes 422 HQ, grayscale)
+        // Build mask encoder
         let mut mask_process = Command::new("ffmpeg")
             .args(&[
                 "-y",
@@ -70,10 +78,18 @@ impl ProResEncoder {
                 "-video_size", &format!("{}x{}", width, height),
                 "-framerate", &format!("{}", fps),
                 "-i", "pipe:0",
-                "-c:v", "prores_ks",
-                "-profile:v", "3", // ProRes 422 HQ
-                "-pix_fmt", "yuv422p10le",
-                "-vendor", "apl0",
+                "-c:v", "hevc_nvenc",
+                "-profile:v", "main10",
+                "-pix_fmt", "yuv420p10le",
+                "-g", "1", // All-Intra
+                "-bf", "0",
+                "-preset", "p6",
+                "-rc", "constqp",
+                "-qp", "12", 
+                "-spatial_aq", "0",
+                "-temporal_aq", "0",
+
+                "-movflags", "+faststart",
                 "-threads", "12",
                 mask_path.to_str().unwrap(),
             ])
