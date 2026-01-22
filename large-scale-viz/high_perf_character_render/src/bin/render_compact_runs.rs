@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use clap::Parser;
 use rand::Rng;
 use sprite_video_renderer::data::{CoordinateMapper, INVALID_MAP_ID_FLAG};
@@ -78,6 +78,13 @@ struct CompactRun {
     coords: Vec<UltraCompactCoordMem>,
 }
 
+#[derive(Debug, Clone)]
+struct CompactRunMetadata {
+    sprite_id: u8,
+    coord_count: usize,
+    file_offset: u64,
+}
+
 fn main() -> Result<()> {
     pollster::block_on(run())
 }
@@ -96,19 +103,19 @@ async fn run() -> Result<()> {
     log::info!("Loading map data...");
     let coordinate_mapper = CoordinateMapper::load(&args.map_data)?;
 
-    // Load runs from file
-    log::info!("Loading compact runs...");
-    let runs = load_compact_runs(&args.input)?;
-    log::info!("Loaded {} runs", runs.len());
+    // Load run metadata from file
+    log::info!("Loading compact run metadata...");
+    let metadata = load_compact_runs_metadata(&args.input)?;
+    log::info!("Loaded {} run metadata entries", metadata.len());
 
-    if runs.is_empty() {
+    if metadata.is_empty() {
         log::warn!("No runs to render!");
         return Ok(());
     }
 
     // Calculate max duration (with faster animation speed)
     let effective_interval_ms = (args.interval_ms / args.speed_multiplier) as f32;
-    let max_coords = runs.iter().map(|r| r.coords.len()).max().unwrap();
+    let max_coords = metadata.iter().map(|m| m.coord_count).max().unwrap();
     let max_duration_ms = max_coords as f32 * effective_interval_ms;
 
     let mut total_frames = (max_duration_ms / 1000.0 * args.fps as f32).ceil() as usize;
@@ -122,7 +129,12 @@ async fn run() -> Result<()> {
 
     log::info!("Animation: {:.2} seconds, {} frames @ {} fps",
                total_frames as f32 / args.fps as f32, total_frames, args.fps);
-    log::info!("Total runs: {}", runs.len());
+    log::info!("Total runs: {}", metadata.len());
+
+    // Calculate chunk size (1/8 of max coords)
+    let chunk_size = (max_coords + 7) / 8; // Round up
+    let num_chunks = (max_coords + chunk_size - 1) / chunk_size;
+    log::info!("Processing in {} chunks of ~{} coords each", num_chunks, chunk_size);
 
     // Initialize GPU
     log::info!("Initializing GPU...");
@@ -140,48 +152,92 @@ async fn run() -> Result<()> {
         &texture_atlas,
         args.width,
         args.height,
-        runs.len() + 1000,
+        metadata.len() + 1000,
     )?;
 
     // Create encoder
     log::info!("Starting video encoder...");
     let mut encoder = ProResEncoder::new(&args.output, args.width, args.height, args.fps)?;
 
-    // Track last direction for each run
+    // Track last direction for each run (persists across chunks)
     let mut run_directions: Vec<sprite_video_renderer::data::Direction> =
-        vec![sprite_video_renderer::data::Direction::Down; runs.len()];
+        vec![sprite_video_renderer::data::Direction::Down; metadata.len()];
 
     // Generate random offsets [0, 1) for each run to desync their animations
     let mut rng = rand::thread_rng();
-    let run_offsets: Vec<f32> = (0..runs.len())
+    let run_offsets: Vec<f32> = (0..metadata.len())
         .map(|_| rng.gen::<f32>())
         .collect();
     log::info!("Generated random offsets for {} runs", run_offsets.len());
 
-    // Render frames
-    log::info!("Rendering {} frames...", total_frames);
+    // Use sliding window to keep only necessary chunks in memory
+    log::info!("Rendering {} frames with sliding chunk window...", total_frames);
     let start_time = std::time::Instant::now();
+
+    let mut current_chunk_idx: Option<usize> = None;
+    let mut loaded_runs: Vec<CompactRun> = Vec::new();
+    let mut loaded_chunk_start = 0;
+    let mut loaded_chunk_end = 0;
 
     for frame_number in 0..total_frames {
         let time_ms = frame_number as f32 * (1000.0 / args.fps as f32);
 
+        // Determine which coord indices are accessed in this frame (approximately)
+        // Use median coord index to determine which chunk to load
+        let median_progress = (time_ms / effective_interval_ms) + 0.5; // Use 0.5 as median offset
+        let median_coord_index = median_progress as usize;
+
+        // Determine which chunk this falls into
+        let needed_chunk_idx = (median_coord_index / chunk_size).min(num_chunks - 1);
+
+        // Load chunk if it's not the current one
+        // Add overlap of 2 coords on each side to handle random offsets
+        if current_chunk_idx != Some(needed_chunk_idx) {
+            loaded_chunk_start = (needed_chunk_idx * chunk_size).saturating_sub(2);
+            loaded_chunk_end = (((needed_chunk_idx + 1) * chunk_size) + 2).min(max_coords);
+
+            log::info!("Frame {}: Loading chunk {}/{} (coords [{}, {}) with overlap)",
+                       frame_number, needed_chunk_idx + 1, num_chunks,
+                       loaded_chunk_start, loaded_chunk_end);
+
+            loaded_runs = load_chunk_coords(&args.input, &metadata, loaded_chunk_start, loaded_chunk_end)?;
+            current_chunk_idx = Some(needed_chunk_idx);
+        }
+
         // Calculate sprite instances for this frame
         let mut sprite_instances = Vec::new();
 
-        for (run_idx, run) in runs.iter().enumerate() {
+        for (run_idx, run) in loaded_runs.iter().enumerate() {
             // Calculate which coord index we're at (with random offset for desyncing)
             let progress = (time_ms / effective_interval_ms) + run_offsets[run_idx];
             let coord_index = progress as usize;
 
-            if coord_index >= run.coords.len() {
+            let total_coords = metadata[run_idx].coord_count;
+            if coord_index >= total_coords {
                 continue; // This run has finished
             }
 
-            let next_index = (coord_index + 1).min(run.coords.len() - 1);
+            // Check if coord_index is in currently loaded chunk
+            if coord_index < loaded_chunk_start || coord_index >= loaded_chunk_end {
+                continue; // Not in loaded chunk
+            }
+
+            // Map to local coords array
+            let local_coord_index = coord_index - loaded_chunk_start;
+            if local_coord_index >= run.coords.len() {
+                continue;
+            }
+
+            let next_index = (coord_index + 1).min(total_coords - 1);
+            let local_next_index = if next_index < loaded_chunk_end {
+                next_index - loaded_chunk_start
+            } else {
+                local_coord_index
+            };
             let interpolation_t = progress.fract();
 
-            let current_coord = &run.coords[coord_index];
-            let next_coord = &run.coords[next_index];
+            let current_coord = &run.coords[local_coord_index];
+            let next_coord = &run.coords[local_next_index];
 
             // Convert to i64 for coordinate mapper
             let current_coords = [current_coord.x as i64, current_coord.y as i64, current_coord.map_id as i64];
@@ -225,10 +281,8 @@ async fn run() -> Result<()> {
                 };
                 run_directions[run_idx] = new_direction;
             }
-            // else: no movement, keep the stored direction
 
             // Get texture coordinates
-
             let are_we_biking_on_route_17 = current_coord.map_id == 28 || next_coord.map_id == 28;
 
             let sprite_index_capped = if are_we_biking_on_route_17 {
@@ -248,7 +302,7 @@ async fn run() -> Result<()> {
         // Debug logging for first frame
         if frame_number == 0 {
             log::info!("First frame: {} runs, {} sprites rendered",
-                       runs.len(), sprite_instances.len());
+                       metadata.len(), sprite_instances.len());
 
             if !sprite_instances.is_empty() {
                 log::info!("Sample sprite positions (first 10):");
@@ -283,13 +337,15 @@ async fn run() -> Result<()> {
             let eta = (total_frames - frame_number - 1) as f32 / fps_actual;
 
             log::info!(
-                "Progress: {:.1}% ({}/{}) | {:.1} fps | ETA: {:.1}s | Sprites: {}",
+                "Progress: {:.1}% ({}/{}) | {:.1} fps | ETA: {:.1}s | Sprites: {} | Chunk: {}/{}",
                 progress,
                 frame_number + 1,
                 total_frames,
                 fps_actual,
                 eta,
-                sprite_instances.len()
+                sprite_instances.len(),
+                current_chunk_idx.map(|i| i + 1).unwrap_or(0),
+                num_chunks
             );
         }
     }
@@ -310,7 +366,7 @@ async fn run() -> Result<()> {
     Ok(())
 }
 
-fn load_compact_runs(path: &PathBuf) -> Result<Vec<CompactRun>> {
+fn load_compact_runs_metadata(path: &PathBuf) -> Result<Vec<CompactRunMetadata>> {
     let mut reader: Box<dyn Read> = if path.extension().and_then(|s| s.to_str()) == Some("zst") {
         // Decompress
         log::info!("Decompressing zstd file...");
@@ -322,13 +378,11 @@ fn load_compact_runs(path: &PathBuf) -> Result<Vec<CompactRun>> {
         Box::new(BufReader::new(file))
     };
 
-    let mut runs = Vec::new();
-    let mut buffer = vec![0u8; 1024 * 1024]; // 1MB buffer for reading
-
-    let mut skipped_runs: u32 = 0;
+    let mut metadata = Vec::new();
+    let mut current_offset: u64 = 0;
     let mut all_sprite_ids = HashSet::new();
 
-    'runs_loop: loop {
+    loop {
         // Read sprite_id
         let mut sprite_id_buf = [0u8; 1];
         match reader.read_exact(&mut sprite_id_buf) {
@@ -338,61 +392,114 @@ fn load_compact_runs(path: &PathBuf) -> Result<Vec<CompactRun>> {
         }
         let sprite_id = sprite_id_buf[0];
         all_sprite_ids.insert(sprite_id);
+        current_offset += 1;
 
         // Read coord_count
         let mut count_buf = [0u8; 2];
         reader.read_exact(&mut count_buf)?;
         let coord_count = u16::from_le_bytes(count_buf) as usize;
+        current_offset += 2;
 
-        // Read coords
-        let bytes_to_read = coord_count * std::mem::size_of::<UltraCompactCoordMem>();
-        if buffer.len() < bytes_to_read {
-            buffer.resize(bytes_to_read, 0);
+        // Store metadata with the offset where coords start
+        let coords_offset = current_offset;
+        metadata.push(CompactRunMetadata {
+            sprite_id,
+            coord_count,
+            file_offset: coords_offset,
+        });
+
+        // Skip over the coordinate data
+        let bytes_to_skip = coord_count * std::mem::size_of::<UltraCompactCoordMem>();
+        let mut skip_buffer = vec![0u8; bytes_to_skip];
+        reader.read_exact(&mut skip_buffer)?;
+        current_offset += bytes_to_skip as u64;
+
+        if metadata.len() % 100000 == 0 {
+            log::info!("Loaded {} run metadata entries", metadata.len());
+        }
+    }
+
+    Ok(metadata)
+}
+
+fn load_chunk_coords(
+    path: &PathBuf,
+    metadata: &[CompactRunMetadata],
+    chunk_start: usize,
+    chunk_end: usize,
+) -> Result<Vec<CompactRun>> {
+    let mut reader: Box<dyn Read> = if path.extension().and_then(|s| s.to_str()) == Some("zst") {
+        // For compressed files, we need to read from the beginning
+        let file = File::open(path)?;
+        Box::new(zstd::Decoder::new(file)?)
+    } else {
+        let file = File::open(path)?;
+        Box::new(BufReader::new(file))
+    };
+
+    let mut runs = Vec::with_capacity(metadata.len());
+    let mut current_file_pos: u64 = 0;
+    let mut buffer = vec![0u8; 1024 * 1024];
+
+    for meta in metadata {
+        // Skip to this run's data if needed
+        if current_file_pos < meta.file_offset {
+            let bytes_to_skip = meta.file_offset - current_file_pos;
+            let mut skip_buf = vec![0u8; bytes_to_skip as usize];
+            reader.read_exact(&mut skip_buf)?;
+            current_file_pos = meta.file_offset;
         }
 
-        reader.read_exact(&mut buffer[..bytes_to_read])?;
+        // Calculate which coords to load for this run
+        let run_chunk_start = chunk_start.min(meta.coord_count);
+        let run_chunk_end = chunk_end.min(meta.coord_count);
+        let coords_to_load = if run_chunk_start < run_chunk_end {
+            run_chunk_end - run_chunk_start
+        } else {
+            0
+        };
 
-        let mut coords = Vec::with_capacity(coord_count);
-        for i in 0..coord_count {
-            let offset = i * std::mem::size_of::<UltraCompactCoordMem>();
-            let coord = unsafe {
-                std::ptr::read_unaligned(buffer[offset..].as_ptr() as *const UltraCompactCoordMem)
-            };
-            coords.push(coord);
-            /* 
-            let x = coord.x;
-            let y = coord.y;
-            let map_id = coord.map_id;
-            if x > u8::MAX as u16 {
-                //log::error!("got x coord with value: {}", x);
-                skipped_runs += 1;
-                continue 'runs_loop;
-            }
-            if y > u8::MAX as u16 {
-                //log::error!("got y coord with value: {}", y);
-                skipped_runs += 1;
-                continue 'runs_loop;
-            }
-            if map_id > u8::MAX as u16 {
-                //log::error!("got map_id with value: {}", map_id);
-                skipped_runs += 1;
-                continue 'runs_loop;
-            }
-            let packy_coords = UltraCompactCoordMem {
-                x: x as u8,
-                y: y as u8,
-                map_id: map_id as u8,
-            };
-            coords.push(packy_coords);
-            */
+        // Skip coords before chunk_start
+        let skip_before = run_chunk_start * std::mem::size_of::<UltraCompactCoordMem>();
+        if skip_before > 0 {
+            let mut skip_buf = vec![0u8; skip_before];
+            reader.read_exact(&mut skip_buf)?;
+            current_file_pos += skip_before as u64;
         }
 
-        runs.push(CompactRun { sprite_id, coords });
+        // Load coords in this chunk
+        let mut coords = Vec::with_capacity(coords_to_load);
+        if coords_to_load > 0 {
+            let bytes_to_read = coords_to_load * std::mem::size_of::<UltraCompactCoordMem>();
+            if buffer.len() < bytes_to_read {
+                buffer.resize(bytes_to_read, 0);
+            }
+            reader.read_exact(&mut buffer[..bytes_to_read])?;
+            current_file_pos += bytes_to_read as u64;
 
-        if runs.len() % 100000 == 0 {
-            log::info!("Loaded {} runs, skipped {} ", runs.len(), skipped_runs);
+            for i in 0..coords_to_load {
+                let offset = i * std::mem::size_of::<UltraCompactCoordMem>();
+                let coord = unsafe {
+                    std::ptr::read_unaligned(buffer[offset..].as_ptr() as *const UltraCompactCoordMem)
+                };
+                coords.push(coord);
+            }
         }
+
+        // Skip coords after chunk_end
+        let skip_after = (meta.coord_count - run_chunk_end) * std::mem::size_of::<UltraCompactCoordMem>();
+        if skip_after > 0 {
+            let mut skip_buf = vec![0u8; skip_after];
+            reader.read_exact(&mut skip_buf)?;
+            current_file_pos += skip_after as u64;
+        }
+
+        runs.push(CompactRun {
+            sprite_id: meta.sprite_id,
+            coords,
+        });
     }
 
     Ok(runs)
 }
+
