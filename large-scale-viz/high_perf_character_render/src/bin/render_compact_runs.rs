@@ -48,6 +48,10 @@ struct Args {
     #[arg(long, default_value = "4")]
     speed_multiplier: u32,
 
+    /// Starting step/coordinate index in the runs (default: 0)
+    #[arg(long)]
+    start_step: Option<usize>,
+
     /// Maximum number of frames to render (for testing)
     #[arg(long)]
     max_frames: Option<usize>,
@@ -99,6 +103,11 @@ async fn run() -> Result<()> {
     log::info!("Output: {:?}", args.output);
     log::info!("Speed multiplier: {}x ({}ms between coords)", args.speed_multiplier, args.interval_ms / args.speed_multiplier);
 
+    let start_step = args.start_step.unwrap_or(0);
+    if start_step > 0 {
+        log::info!("Starting from step/coord index: {}", start_step);
+    }
+
     // Load coordinate mapper
     log::info!("Loading map data...");
     let coordinate_mapper = CoordinateMapper::load(&args.map_data)?;
@@ -116,19 +125,31 @@ async fn run() -> Result<()> {
     // Calculate max duration (with faster animation speed)
     let effective_interval_ms = (args.interval_ms / args.speed_multiplier) as f32;
     let max_coords = metadata.iter().map(|m| m.coord_count).max().unwrap();
-    let max_duration_ms = max_coords as f32 * effective_interval_ms;
 
-    let mut total_frames = (max_duration_ms / 1000.0 * args.fps as f32).ceil() as usize;
+    // Validate start_step
+    if start_step >= max_coords {
+        log::error!("start_step ({}) exceeds maximum coordinate count ({}) in runs", start_step, max_coords);
+        return Ok(());
+    }
+
+    // Calculate time offset for start_step
+    let start_time_offset_ms = start_step as f32 * effective_interval_ms;
+
+    // Calculate remaining duration from start_step to end
+    let remaining_coords = max_coords - start_step;
+    let remaining_duration_ms = remaining_coords as f32 * effective_interval_ms;
+
+    let mut total_frames = (remaining_duration_ms / 1000.0 * args.fps as f32).ceil() as usize;
 
     if let Some(max) = args.max_frames {
         if max < total_frames {
             total_frames = max;
-            log::info!("Limiting to {} frames (instead of full animation)", max);
+            log::info!("Limiting to {} frames (instead of full animation from start_step)", max);
         }
     }
 
-    log::info!("Animation: {:.2} seconds, {} frames @ {} fps",
-               total_frames as f32 / args.fps as f32, total_frames, args.fps);
+    log::info!("Animation: {:.2} seconds, {} frames @ {} fps (from step {} to end)",
+               total_frames as f32 / args.fps as f32, total_frames, args.fps, start_step);
     log::info!("Total runs: {}", metadata.len());
 
     // Calculate chunk size (1/8 of max coords)
@@ -180,7 +201,8 @@ async fn run() -> Result<()> {
     let mut loaded_chunk_end = 0;
 
     for frame_number in 0..total_frames {
-        let time_ms = frame_number as f32 * (1000.0 / args.fps as f32);
+        // Add start_time_offset_ms to effectively start from start_step
+        let time_ms = (frame_number as f32 * (1000.0 / args.fps as f32)) + start_time_offset_ms;
 
         // Determine which coord indices are accessed in this frame (approximately)
         // Use median coord index to determine which chunk to load
