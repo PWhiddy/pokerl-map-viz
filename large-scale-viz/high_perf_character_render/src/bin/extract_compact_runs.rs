@@ -191,7 +191,9 @@ fn main() -> Result<()> {
                 let dx = current_global_pos[0] - previous_global_pos[0];
                 let dy = current_global_pos[1] - previous_global_pos[1];
                 let global_step_delta = (dx*dx + dy*dy).sqrt();
-                let early_big_jump_fail = args.pallet_start_only && (j as i64 - run_start as i64) < 140 && global_step_delta > 30.0;
+                let step_count = j as i64 - run_start as i64;
+                let exact_start_compatible = true;//step_count > 1 || (previous_coord[0] == 5 && previous_coord[1] == 3 && previous_coord[2] == 40);
+                let early_big_jump_fail = args.pallet_start_only && (!exact_start_compatible || (step_count < 140 && global_step_delta > 30.0));
                 ///////////////
 
                 let should_split = time_gap >= gap_threshold || early_big_jump_fail
