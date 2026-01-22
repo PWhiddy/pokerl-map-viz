@@ -59,8 +59,8 @@ impl ProResEncoder {
                 "-spatial_aq", "0",
                 "-temporal_aq", "0",
 
-                "-movflags", "+faststart",
-                "-threads", "12",
+            //    "-movflags", "+faststart",
+                "-threads", "16",
                 value_path.to_str().unwrap(),
             ])
             .stdin(Stdio::piped())
@@ -89,8 +89,8 @@ impl ProResEncoder {
                 "-spatial_aq", "0",
                 "-temporal_aq", "0",
 
-                "-movflags", "+faststart",
-                "-threads", "12",
+            //    "-movflags", "+faststart",
+                "-threads", "16",
                 mask_path.to_str().unwrap(),
             ])
             .stdin(Stdio::piped())
