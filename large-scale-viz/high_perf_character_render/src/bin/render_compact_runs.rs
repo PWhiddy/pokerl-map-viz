@@ -219,6 +219,10 @@ async fn run() -> Result<()> {
 
             // Check if coord_index is in currently loaded chunk
             if coord_index < loaded_chunk_start || coord_index >= loaded_chunk_end {
+                log::warn!(
+                    "coord index not loaded! this should not happen! coord index: {} loaded start: {} loaded end: {}",
+                    coord_index, loaded_chunk_start, loaded_chunk_end
+                );
                 continue; // Not in loaded chunk
             }
 
