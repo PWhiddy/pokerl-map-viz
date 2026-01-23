@@ -253,6 +253,19 @@ impl ParquetReader {
                         coord_values.value(2),
                     ];
 
+                    let compact = match (
+                        u8::try_from(coords[0]),
+                        u8::try_from(coords[1]),
+                        u8::try_from(coords[2]),
+                    ) {
+                        (Ok(x), Ok(y), Ok(map_id)) => [x, y, map_id],
+                        _ => [
+                            0,
+                            0,
+                            255,
+                        ],
+                    };
+
                     // Each coordinate in the path gets the same timestamp/user/env_id
                     // path_index preserves the order within this path
                     frames.push(SpriteFrame {
@@ -262,7 +275,7 @@ impl ParquetReader {
                         sprite_id,
                         color: String::new(), // Unused - placeholder
                         extra: String::new(), // Unused - placeholder
-                        coords,
+                        coords: compact,
                         path_index: coord_idx,
                     });
                 }

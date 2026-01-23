@@ -52,7 +52,7 @@ struct Args {
 
 #[derive(Debug, Clone, Copy)]
 struct CompactFrame {
-    coords: [i64; 3],
+    coords: [u8; 3],
 }
 
 #[derive(Debug)]
@@ -99,7 +99,7 @@ async fn run() -> Result<()> {
     let mut runs = Vec::new();
     let gap_threshold = Duration::minutes(2);
     let min_duration = Duration::seconds(args.min_duration_secs);
-    let reset_maps = vec![0i64, 37, 40];
+    let reset_maps = vec![0u8, 37, 40];
 
     let mut i = 0;
     while i < frames.len() {

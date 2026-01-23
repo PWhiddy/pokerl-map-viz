@@ -4,18 +4,18 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-fn deserialize_id<'de, D>(deserializer: D) -> Result<i64, D::Error>
+fn deserialize_id<'de, D>(deserializer: D) -> Result<u8, D::Error>
 where
     D: Deserializer<'de>,
 {
     let s = String::deserialize(deserializer)?;
-    s.parse::<i64>().map_err(serde::de::Error::custom)
+    s.parse::<u8>().map_err(serde::de::Error::custom)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MapRegion {
     #[serde(deserialize_with = "deserialize_id")]
-    pub id: i64,
+    pub id: u8,
     pub coordinates: [f32; 2],
     #[serde(default)]
     pub name: Option<String>,
@@ -27,7 +27,7 @@ struct MapData {
 }
 
 pub struct CoordinateMapper {
-    regions: HashMap<i64, MapRegion>,
+    pub regions: HashMap<u8, MapRegion>,
 }
 
 pub const INVALID_MAP_ID_FLAG: [f32; 2] = [117117.0, 117117.0];
@@ -41,7 +41,7 @@ impl CoordinateMapper {
         let map_data: MapData = serde_json::from_str(&content)
             .context("Failed to parse map_data.json")?;
 
-        let regions: HashMap<i64, MapRegion> = map_data
+        let regions: HashMap<u8, MapRegion> = map_data
             .regions
             .into_iter()
             .map(|r| (r.id, r))
@@ -52,11 +52,25 @@ impl CoordinateMapper {
         Ok(Self { regions })
     }
 
+    pub fn pair_to_text(&self, a: &[u8; 3], b: &[u8; 3]) -> String {
+        if let Some(region_a) = self.regions.get(&a[2]) {
+            if let Some(region_b) = self.regions.get(&b[2]) {
+                let a_name = region_a.name.clone().unwrap();
+                let b_name = region_b.name.clone().unwrap();
+                format!("Transition {} [{}, {}] -> {} [{}, {}]", a_name, a[0], a[1], b_name, b[0], b[1])
+            } else {
+                "Invalid map_id".to_string()
+            }
+        } else {
+            "Invalid map_id".to_string()
+        }
+    }
+
     /// Convert game coordinates to pixel position
     /// Formula from JS: [coords[0] + mapX - 217.5, coords[1] + mapY - 221.5] * 16
     /// The JS uses a centered coordinate system (0,0 at center of 6976x7104 map)
     /// We need to offset to top-left coordinate system for rendering to 8192x8192 canvas
-    pub fn convert_coords(&self, coords: &[i64; 3]) -> [f32; 2] {
+    pub fn convert_coords(&self, coords: &[u8; 3]) -> [f32; 2] {
         let map_region_id = coords[2];
 
         if let Some(region) = self.regions.get(&map_region_id) {

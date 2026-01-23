@@ -55,7 +55,7 @@ fn main() -> Result<()> {
 
     // Process each user+env_id to identify runs with reset detection
     let mut stats: Vec<UserEnvStats> = Vec::new();
-    let reset_maps = vec![0i64, 37, 40];
+    let reset_maps = vec![0u8, 37, 40];
 
     for (_key, mut frames_list) in user_env_data {
         if frames_list.is_empty() {
@@ -137,7 +137,7 @@ fn main() -> Result<()> {
 /// This processes frames in a single pass - O(n)
 fn detect_runs_with_resets(
     frames: &[SpriteFrame],
-    reset_maps: &[i64],
+    reset_maps: &[u8],
 ) -> Vec<Run> {
     if frames.is_empty() {
         return Vec::new();

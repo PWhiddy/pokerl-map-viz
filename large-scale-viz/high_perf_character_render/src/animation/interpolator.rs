@@ -138,6 +138,7 @@ mod tests {
                     color: "#000000".to_string(),
                     extra: String::new(),
                     coords: [0, 0, 1],
+                    path_index: 0,
                 },
                 SpriteFrame {
                     timestamp: Utc::now(),
@@ -147,6 +148,7 @@ mod tests {
                     color: "#000000".to_string(),
                     extra: String::new(),
                     coords: [10, 0, 1],
+                    path_index: 0,
                 },
             ],
         };

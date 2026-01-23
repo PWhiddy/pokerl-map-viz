@@ -265,9 +265,8 @@ async fn run() -> Result<()> {
             let current_coord = &run.coords[local_coord_index];
             let next_coord = &run.coords[local_next_index];
 
-            // Convert to i64 for coordinate mapper
-            let current_coords = [current_coord.x as i64, current_coord.y as i64, current_coord.map_id as i64];
-            let next_coords = [next_coord.x as i64, next_coord.y as i64, next_coord.map_id as i64];
+            let current_coords = [current_coord.x, current_coord.y, current_coord.map_id];
+            let next_coords = [next_coord.x, next_coord.y, next_coord.map_id];
 
             // Convert to pixel positions
             let current_pos = coordinate_mapper.convert_coords(&current_coords);

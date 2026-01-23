@@ -54,7 +54,7 @@ pub struct SpriteFrame {
     pub sprite_id: u8,
     pub color: String,
     pub extra: String,
-    pub coords: [i64; 3], // [x, y, map_region_id]
+    pub coords: [u8; 3], // [x, y, map_region_id]
     pub path_index: usize, // Order within the path for this timestamp
 }
 
