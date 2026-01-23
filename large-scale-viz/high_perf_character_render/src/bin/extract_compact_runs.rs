@@ -121,9 +121,9 @@ fn main() -> Result<()> {
 
     let required_order_init_idx = 5;
         // route 1, viridian city, route 2, viridian forrest, pewter city, pewter gym, 
-        // route 3, mt moon route 3, mt moon B1F, mt moon B2F, route 4, cerulean city, 
+        // route 3, route 4, mt moon 1f, mt moon B1F, mt moon B2F, cerulean city, 
         // route 24, route 25, bills house, route 5, route 6, vermillion city
-    let map_id_order_required = [0u8, 37, 40, 38, 39, /**/ 12, 1, 13, 51, 2, 54, 14, 59, 60, 61, 15, 3, 35, 36, 88, 16, 17, 5];
+    let map_id_order_required = [0u8, 37, 40, 38, 39, /**/ 12, 1, 13, 51, 2, 54, 14, 15, 59, 60, 61, 3, 35, 36, 88, 16, 17, 5];
 /*
 maps: [40]
 maps: [40, 0]
@@ -289,7 +289,7 @@ just entered first mt moon cave room
                 //if let Some(previous_progress_idx) = previous_progress_idx_res {
                     if let Some(current_progress_idx) = current_progress_idx_res {
                         // if have warped backwards but to no further back than viridian city, let this run continue
-                        if current_progress_idx < run_map_id_progress && current_progress_idx > 5 {
+                        if current_progress_idx <= run_map_id_progress && current_progress_idx > 5 {
                             legal_backtrack = true;
                         }
                         if (current_progress_idx as i32) - (run_map_id_progress as i32) > 1 {
