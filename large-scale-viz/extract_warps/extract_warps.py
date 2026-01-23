@@ -204,8 +204,8 @@ def main():
             dest_y = dest_warp['y']
 
             # Create bidirectional warp entries
-            key1 = f"[{source_x},{source_y},{source_map_id}]-[{dest_x},{dest_y},{dest_map_id}]"
-            key2 = f"[{dest_x},{dest_y},{dest_map_id}]-[{source_x},{source_y},{source_map_id}]"
+            key1 = f"[{source_map_id}]-[{dest_map_id}]"
+            key2 = f"[{dest_map_id}]-[{source_map_id}]"
             transitions[key1] = "warp"
             transitions[key2] = "warp"
 
@@ -253,8 +253,8 @@ def main():
                 for x in range(src_width):
                     dest_x = x + offset
                     if 0 <= dest_x < dest_width:
-                        key1 = f"[{x},{0},{source_map_id}]-[{dest_x},{dest_height-1},{dest_map_id}]"
-                        key2 = f"[{dest_x},{dest_height-1},{dest_map_id}]-[{x},{0},{source_map_id}]"
+                        key1 = f"[{source_map_id}]-[{dest_map_id}]"
+                        key2 = f"[{dest_map_id}]-[{source_map_id}]"
                         transitions[key1] = "overworld"
                         transitions[key2] = "overworld"
                         connection_count += 2
@@ -264,8 +264,8 @@ def main():
                 for x in range(src_width):
                     dest_x = x + offset
                     if 0 <= dest_x < dest_width:
-                        key1 = f"[{x},{src_height-1},{source_map_id}]-[{dest_x},{0},{dest_map_id}]"
-                        key2 = f"[{dest_x},{0},{dest_map_id}]-[{x},{src_height-1},{source_map_id}]"
+                        key1 = f"[{source_map_id}]-[{dest_map_id}]"
+                        key2 = f"[{dest_map_id}]-[{source_map_id}]"
                         transitions[key1] = "overworld"
                         transitions[key2] = "overworld"
                         connection_count += 2
@@ -275,8 +275,8 @@ def main():
                 for y in range(src_height):
                     dest_y = y + offset
                     if 0 <= dest_y < dest_height:
-                        key1 = f"[{0},{y},{source_map_id}]-[{dest_width-1},{dest_y},{dest_map_id}]"
-                        key2 = f"[{dest_width-1},{dest_y},{dest_map_id}]-[{0},{y},{source_map_id}]"
+                        key1 = f"[{source_map_id}]-[{dest_map_id}]"
+                        key2 = f"[{dest_map_id}]-[{source_map_id}]"
                         transitions[key1] = "overworld"
                         transitions[key2] = "overworld"
                         connection_count += 2
@@ -286,8 +286,8 @@ def main():
                 for y in range(src_height):
                     dest_y = y + offset
                     if 0 <= dest_y < dest_height:
-                        key1 = f"[{src_width-1},{y},{source_map_id}]-[{0},{dest_y},{dest_map_id}]"
-                        key2 = f"[{0},{dest_y},{dest_map_id}]-[{src_width-1},{y},{source_map_id}]"
+                        key1 = f"[{source_map_id}]-[{dest_map_id}]"
+                        key2 = f"[{dest_map_id}]-[{source_map_id}]"
                         transitions[key1] = "overworld"
                         transitions[key2] = "overworld"
                         connection_count += 2
@@ -296,7 +296,7 @@ def main():
     print(f"\nTotal transitions: {len(transitions)}")
 
     # Save to JSON
-    output_file = 'transitions.json'
+    output_file = 'transitions_weak.json'
     with open(output_file, 'w') as f:
         json.dump(transitions, f, indent=2, sort_keys=True)
 
