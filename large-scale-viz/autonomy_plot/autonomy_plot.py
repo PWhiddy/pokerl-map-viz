@@ -9,7 +9,6 @@ import numpy as np
 from manim import (
     Annulus,
     AnimationGroup,
-    Arrow,
     Axes,
     Circle,
     Create,
@@ -19,10 +18,10 @@ from manim import (
     LEFT,
     Line,
     ORIGIN,
+    Polygon,
     RIGHT,
     Scene,
     Square,
-    SurroundingRectangle,
     Text,
     UP,
     VGroup,
@@ -97,8 +96,10 @@ class AIAutonomy(Scene):
         ).arrange(np.array([0.0, -1.0, 0.0]), buff=0.055)
         y_label.next_to(axes, LEFT, buff=0.3)
 
-        legend = self.make_legends(data, font, text_color, muted)
-        legend.to_edge(np.array([0.0, -1.0, 0.0]), buff=0.38)
+        legend_layout, legend_base, type_legend_entries = self.make_legends(
+            data, font, text_color, muted
+        )
+        legend_layout.to_edge(np.array([0.0, -1.0, 0.0]), buff=0.38)
 
         intro_time = float(timing["intro_seconds"])
         self.play(Write(title), run_time=intro_time * 0.48)
@@ -107,7 +108,7 @@ class AIAutonomy(Scene):
                 Create(axes),
                 FadeIn(x_label, shift=UP * 0.05),
                 FadeIn(y_label, shift=RIGHT * 0.05),
-                FadeIn(legend, shift=UP * 0.08),
+                FadeIn(legend_base, shift=UP * 0.08),
                 lag_ratio=0.08,
             ),
             run_time=intro_time * 0.52,
@@ -118,41 +119,35 @@ class AIAutonomy(Scene):
         label_time = min(0.78, seconds_per_point * 0.28)
         hold_time = max(0.0, seconds_per_point - reveal_time - label_time)
         connected_types = set(data.get("connect_types", []))
-        previous_positions: dict[str, np.ndarray] = {}
+        previous_positions: dict[str, tuple[np.ndarray, dict]] = {}
+        revealed_types: set[str] = set()
 
         for point in data["points"]:
             point_type = point["type"]
             color = style["type_colors"].get(point_type, text_color)
             position = axes.c2p(float(point["x"]), float(point["y"]))
             marker = self.make_marker(point, position, color)
-            label_group, connector = self.make_label(
+            label_group = self.make_label(
                 point,
                 position,
                 marker,
-                color,
                 font,
                 text_color,
-                style["background_color"],
             )
 
             type_arrow = None
             if point_type in connected_types and point_type in previous_positions:
-                type_arrow = Arrow(
-                    previous_positions[point_type],
+                type_arrow = self.make_fixed_arrow(
+                    previous_positions[point_type][0],
                     position,
-                    buff=0.135,
-                    color=color,
-                    stroke_width=2.2,
-                    max_tip_length_to_length_ratio=0.16,
-                    max_stroke_width_to_length_ratio=4.0,
-                )
-                type_arrow.set_opacity(float(style["connection_opacity"]))
-                type_arrow.get_tip().scale(
-                    0.55, about_point=type_arrow.get_end()
+                    color,
+                    float(style["connection_opacity"]),
+                    previous_positions[point_type][1],
+                    point,
                 )
                 type_arrow.set_z_index(0)
             if point_type in connected_types:
-                previous_positions[point_type] = position
+                previous_positions[point_type] = (position, point)
 
             reveal_animations = [
                 GrowFromCenter(marker, rate_func=ease_out_cubic),
@@ -164,11 +159,15 @@ class AIAutonomy(Scene):
                     num_lines=12,
                 ),
             ]
+            if point_type not in revealed_types:
+                reveal_animations.append(
+                    FadeIn(type_legend_entries[point_type], shift=RIGHT * 0.05)
+                )
+                revealed_types.add(point_type)
             if type_arrow is not None:
                 reveal_animations.insert(0, Create(type_arrow))
             self.play(*reveal_animations, run_time=reveal_time)
             self.play(
-                Create(connector),
                 FadeIn(label_group, shift=0.06 * self.offset_unit(point)),
                 run_time=label_time,
             )
@@ -239,11 +238,9 @@ class AIAutonomy(Scene):
         point: dict,
         position: np.ndarray,
         marker: VGroup,
-        color: str,
         font: str,
         text_color: str,
-        background_color: str,
-    ) -> tuple[VGroup, Line]:
+    ) -> VGroup:
         offset = np.array([*point.get("label_offset", [0.5, 0.5]), 0.0], dtype=float)
         label = Text(
             point["label"],
@@ -252,41 +249,73 @@ class AIAutonomy(Scene):
             line_spacing=0.82,
             color=text_color,
         ).move_to(position + offset)
-        card = SurroundingRectangle(
-            label,
-            buff=0.085,
-            corner_radius=0.07,
-            color=color,
-            stroke_width=1.05,
-            fill_color=background_color,
-            fill_opacity=0.93,
-        )
-        label_group = VGroup(card, label)
-        direction = self.offset_unit(point)
-        connector = Line(
-            position,
-            card.get_boundary_point(-direction),
-            color=color,
-            stroke_width=1.25,
-            stroke_opacity=0.72,
-        )
-        connector.set_z_index(1)
+        label_group = VGroup(label)
         marker.set_z_index(3)
         label_group.set_z_index(2)
-        return label_group, connector
+        return label_group
+
+    @staticmethod
+    def make_fixed_arrow(
+        start: np.ndarray,
+        end: np.ndarray,
+        color: str,
+        opacity: float,
+        start_point: dict,
+        end_point: dict,
+    ) -> VGroup:
+        """Build an arrow with a fixed head, joined flush to its shaft."""
+        displacement = end - start
+        distance = np.linalg.norm(displacement)
+        if distance == 0:
+            return VGroup()
+
+        direction = displacement / distance
+        perpendicular = np.array([-direction[1], direction[0], 0.0])
+        start_clearance = AIAutonomy.marker_clearance(start_point, direction)
+        end_clearance = AIAutonomy.marker_clearance(end_point, direction)
+        head_length = 0.11
+        head_half_width = 0.055
+
+        shaft_start = start + direction * start_clearance
+        tip = end - direction * end_clearance
+        head_base = tip - direction * head_length
+        shaft = Line(
+            shaft_start,
+            head_base,
+            color=color,
+            stroke_width=2.2,
+            stroke_opacity=opacity,
+        )
+        head = Polygon(
+            tip,
+            head_base + perpendicular * head_half_width,
+            head_base - perpendicular * head_half_width,
+            stroke_width=0,
+            fill_color=color,
+            fill_opacity=opacity,
+        )
+        return VGroup(shaft, head)
+
+    @staticmethod
+    def marker_clearance(point: dict, direction: np.ndarray) -> float:
+        """Distance from marker center to its outer edge along an arrow."""
+        if point.get("marker", "circle").lower() == "x":
+            cross_radius = 0.145
+            return cross_radius * (abs(direction[0]) + abs(direction[1]))
+        return 0.115
 
     @staticmethod
     def make_legends(
         data: dict, font: str, text_color: str, muted: str
-    ) -> VGroup:
+    ) -> tuple[VGroup, VGroup, dict[str, VGroup]]:
         sample_color = data["style"]["axis_color"]
         feasibility_title = Text(
             data["feasibility_legend_title"], font=font, font_size=18, color=muted
         )
         feasibility_samples = VGroup()
         for fill, label_text in (
-            (0.0, "small progress"),
-            (1.0, "finish the game"),
+            (0.0, "None"),
+            (1.0, "Finishes the game"),
         ):
             marker = AIAutonomy.make_circle_marker(
                 fill, ORIGIN, sample_color, radius=0.078, stroke_width=2.1
@@ -300,13 +329,18 @@ class AIAutonomy(Scene):
 
         type_title = Text(data["type_legend_title"], font=font, font_size=18, color=muted)
         type_samples = VGroup()
+        type_entries: dict[str, VGroup] = {}
         for point_type, color in data["style"]["type_colors"].items():
             swatch = Square(side_length=0.12, stroke_width=0, fill_color=color, fill_opacity=1)
             label = Text(point_type, font=font, font_size=16, color=text_color)
-            type_samples.add(VGroup(swatch, label).arrange(RIGHT, buff=0.1))
+            entry = VGroup(swatch, label).arrange(RIGHT, buff=0.1)
+            type_entries[point_type] = entry
+            type_samples.add(entry)
         type_samples.arrange(RIGHT, buff=0.38)
         type_legend = VGroup(type_title, type_samples).arrange(RIGHT, buff=0.34)
 
-        return VGroup(feasibility_legend, type_legend).arrange(
+        legend_layout = VGroup(feasibility_legend, type_legend).arrange(
             np.array([0.0, -1.0, 0.0]), buff=0.14
         )
+        legend_base = VGroup(feasibility_legend, type_title)
+        return legend_layout, legend_base, type_entries
