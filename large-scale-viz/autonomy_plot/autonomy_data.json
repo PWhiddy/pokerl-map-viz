@@ -1,0 +1,110 @@
+{
+  "title": "AI Autonomy",
+  "x_axis_label": "Independence from human effort",
+  "y_axis_label": "Independence\nfrom human\nknowledge",
+  "feasibility_legend_title": "Feasibiliy",
+  "type_legend_title": "Type",
+  "connect_types": ["RL", "LLM"],
+  "timing": {
+    "intro_seconds": 1.8,
+    "seconds_per_point": 3.0,
+    "final_hold_seconds": 3.0
+  },
+  "style": {
+    "background_color": "#07111F",
+    "text_color": "#E8EEF7",
+    "muted_text_color": "#9AA9BD",
+    "axis_color": "#B9C7D8",
+    "connection_opacity": 0.48,
+    "font": "DejaVu Sans",
+    "type_colors": {
+      "Program": "#FB923C",
+      "TAS": "#FACC15",
+      "RL": "#2DD4BF",
+      "LLM": "#A78BFA"
+    }
+  },
+  "points": [
+    {
+      "label": "Random",
+      "x": 0.95,
+      "y": 0.95,
+      "fill": 0.15,
+      "type": "Program",
+      "label_offset": [-0.85, -0.38]
+    },
+    {
+      "label": "TAS",
+      "x": 0.05,
+      "y": 0.05,
+      "fill": 1.0,
+      "type": "TAS",
+      "label_offset": [0.42, 0.38]
+    },
+    {
+      "label": "Exploration only",
+      "x": 0.4,
+      "y": 0.85,
+      "fill": 0.3,
+      "type": "RL",
+      "label_offset": [1.1, 0.45]
+    },
+    {
+      "label": "Basic rewards",
+      "x": 0.3,
+      "y": 0.7,
+      "fill": 0.4,
+      "type": "RL",
+      "label_offset": [0.95, -0.38]
+    },
+    {
+      "label": "Piman",
+      "x": 0.8,
+      "y": 0.2,
+      "fill": 0.1,
+      "type": "LLM",
+      "label_offset": [0.7, 0.62]
+    },
+    {
+      "label": "Boey",
+      "x": 0.2,
+      "y": 0.4,
+      "fill": 1.0,
+      "type": "RL",
+      "marker": "x",
+      "label_offset": [1.0, 0.42]
+    },
+    {
+      "label": "Rubinstein",
+      "x": 0.15,
+      "y": 0.4,
+      "fill": 0.95,
+      "type": "RL",
+      "label_offset": [-0.05, 0.7]
+    },
+    {
+      "label": "Hershey,\nClaude sonnet 3.7",
+      "x": 0.6,
+      "y": 0.15,
+      "fill": 0.5,
+      "type": "LLM",
+      "label_offset": [0.12, 0.77]
+    },
+    {
+      "label": "Zhang,\nGemini pro 2.5",
+      "x": 0.35,
+      "y": 0.1,
+      "fill": 1.0,
+      "type": "LLM",
+      "label_offset": [-0.72, 0.42]
+    },
+    {
+      "label": "Fable,\nSol 5.6",
+      "x": 0.8,
+      "y": 0.1,
+      "fill": 1.0,
+      "type": "LLM",
+      "label_offset": [0.82, -0.04]
+    }
+  ]
+}
