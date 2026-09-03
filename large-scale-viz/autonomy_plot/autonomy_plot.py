@@ -13,6 +13,7 @@ from manim import (
     Circle,
     Create,
     FadeIn,
+    FadeOut,
     Flash,
     GrowFromCenter,
     LEFT,
@@ -133,6 +134,7 @@ class AIAutonomy(Scene):
                 marker,
                 font,
                 text_color,
+                float(style.get("point_label_font_size", 17)),
             )
 
             type_arrow = None
@@ -146,7 +148,8 @@ class AIAutonomy(Scene):
                     point,
                 )
                 type_arrow.set_z_index(0)
-            if point_type in connected_types:
+            is_transient = bool(point.get("transient", False))
+            if point_type in connected_types and not is_transient:
                 previous_positions[point_type] = (position, point)
 
             reveal_animations = [
@@ -173,6 +176,14 @@ class AIAutonomy(Scene):
             )
             if hold_time:
                 self.wait(hold_time)
+            if is_transient:
+                transient_objects = [marker, label_group]
+                if type_arrow is not None:
+                    transient_objects.append(type_arrow)
+                self.play(
+                    *(FadeOut(mobject) for mobject in transient_objects),
+                    run_time=float(timing.get("transient_fade_seconds", 0.45)),
+                )
 
         self.wait(float(timing["final_hold_seconds"]))
 
@@ -240,13 +251,14 @@ class AIAutonomy(Scene):
         marker: VGroup,
         font: str,
         text_color: str,
+        default_font_size: float,
     ) -> VGroup:
         offset = np.array([*point.get("label_offset", [0.5, 0.5]), 0.0], dtype=float)
         label = Text(
             point["label"],
             font=font,
-            font_size=19,
-            line_spacing=0.82,
+            font_size=float(point.get("label_font_size", default_font_size)),
+            line_spacing=float(point.get("label_line_spacing", 0.76)),
             color=text_color,
         ).move_to(position + offset)
         label_group = VGroup(label)

@@ -1,5 +1,5 @@
 {
-  "title": "AI Autonomy",
+  "title": "Types of Autonomy",
   "x_axis_label": "Independence from human effort",
   "y_axis_label": "Independence\nfrom human\nknowledge",
   "feasibility_legend_title": "Progress",
@@ -8,6 +8,7 @@
   "timing": {
     "intro_seconds": 1.8,
     "seconds_per_point": 3.0,
+    "transient_fade_seconds": 0.45,
     "final_hold_seconds": 3.0
   },
   "style": {
@@ -16,6 +17,7 @@
     "muted_text_color": "#9AA9BD",
     "axis_color": "#B9C7D8",
     "connection_opacity": 0.68,
+    "point_label_font_size": 17,
     "font": "DejaVu Sans",
     "type_colors": {
       "Script": "#FB923C",
@@ -25,12 +27,12 @@
   },
   "points": [
     {
-      "label": "Random",
+      "label": "Random Actions",
       "x": 0.95,
       "y": 0.95,
       "fill": 0.15,
       "type": "Script",
-      "label_offset": [-0.85, -0.38]
+      "label_offset": [-0.18, -0.38]
     },
     {
       "label": "TAS",
@@ -38,7 +40,7 @@
       "y": 0.05,
       "fill": 1.0,
       "type": "Script",
-      "label_offset": [0.42, 0.38]
+      "label_offset": [0.02, 0.38]
     },
     {
       "label": "Exploration only",
@@ -46,7 +48,7 @@
       "y": 0.85,
       "fill": 0.2,
       "type": "RL",
-      "label_offset": [1.1, 0.45]
+      "label_offset": [0.25, 0.42]
     },
     {
       "label": "Basic rewards",
@@ -54,7 +56,7 @@
       "y": 0.7,
       "fill": 0.3,
       "type": "RL",
-      "label_offset": [0.95, -0.38]
+      "label_offset": [0.62, -0.42]
     },
     {
       "label": "Piman,\nGPT‑4V",
@@ -62,15 +64,16 @@
       "y": 0.2,
       "fill": 0.1,
       "type": "LLM",
-      "label_offset": [0.7, 0.62]
+      "label_offset": [0.4, 0.58]
     },
     {
-      "label": "Improved Obs + Rewards",
+      "label": "Improved Obs\n+ Rewards",
       "x": "0.2",
       "y": "0.7",
       "fill": "0.5",
       "type": "RL",
-      "label_offset": [0.5, 0.5]
+      "label_offset": [-0.35, 0.55],
+      "label_font_size": 16
     },
     {
       "label": "Boey",
@@ -79,7 +82,8 @@
       "fill": 1.0,
       "type": "RL",
       "marker": "x",
-      "label_offset": [1.0, 0.42]
+      "label_offset": [0.55, 0.30],
+      "transient": true
     },
     {
       "label": "Rubinstein",
@@ -87,7 +91,8 @@
       "y": 0.4,
       "fill": 0.95,
       "type": "RL",
-      "label_offset": [-0.05, 0.7]
+      "label_offset": [0.78, 0.12],
+      "label_font_size": 16
     },
     {
       "label": "Hershey,\nClaude sonnet 3.7",
@@ -95,7 +100,8 @@
       "y": 0.15,
       "fill": 0.5,
       "type": "LLM",
-      "label_offset": [0.12, 0.77]
+      "label_offset": [0.03, 0.57],
+      "label_font_size": 16
     },
     {
       "label": "Zhang,\nGemini pro 2.5",
@@ -103,15 +109,17 @@
       "y": 0.1,
       "fill": 1.0,
       "type": "LLM",
-      "label_offset": [-0.72, 0.42]
+      "label_offset": [-0.38, 0.53],
+      "label_font_size": 16
     },
     {
-      "label": "Fable,\nSol 5.6",
+      "label": "Claude Fable,\nGPT 5.6 Sol",
       "x": 0.8,
       "y": 0.1,
       "fill": 1.0,
       "type": "LLM",
-      "label_offset": [0.82, -0.04]
+      "label_offset": [0.98, -0.02],
+      "label_font_size": 16
     }
   ]
 }
