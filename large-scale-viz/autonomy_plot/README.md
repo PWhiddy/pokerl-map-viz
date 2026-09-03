@@ -10,8 +10,10 @@ extremes before any points appear. Their duration and visual styling are
 controlled by `timing.orientation_seconds` and the `orientation_*` style keys.
 The x- and y-axis sweeps use `timing.axis_scan_seconds` and
 `style.axis_scan_color`. The x-axis is introduced and scanned first, followed by
-the y-axis; the lower-left orientation guide then precedes the upper-right one.
-`style.axis_label_color` independently controls the axis-label contrast.
+the y-axis. Each marker makes one end-to-end pass. The lower-left orientation
+guide then precedes the upper-right one.
+`style.axis_label_color` independently controls the axis-label contrast, and
+`style.axis_label_line_spacing` sets the y-axis label's baseline spacing.
 
 `style.text_mobject_scale_factor` applies the Manim text-rendering workaround used
 here for improved kerning on Ubuntu. Its value is `0.0016666666666666668`
@@ -47,10 +49,11 @@ Render the final 4K animation in the requested environment:
 ```
 
 The wrapper uses the `science` Conda environment, disables Manim's stale-frame
-cache, and decodes each rendered segment independently before concatenation to
-avoid intermittent missing-glyph artifacts at H.264 segment boundaries. The
-delivery encode uses one-second keyframes and no B-frames so scrubbing and exact
-frame extraction also preserve every glyph.
+cache, renders Manim's temporary clips entirely from independent frames, decodes
+each segment independently before concatenation, and then reads the joined movie
+sequentially once more. This avoids intermittent missing-glyph artifacts at
+H.264 boundaries. The delivery encode uses one-second keyframes and no B-frames
+so scrubbing and exact frame extraction also preserve every glyph.
 
 For a quick direct preview, run
 `conda run -n science manim --disable_caching -ql autonomy_plot.py AIAutonomy`.

@@ -2,7 +2,7 @@
   "title": "Types of Autonomy",
   "x_axis_label": "Independence from human effort",
   "y_axis_label": "Independence\nfrom human\nknowledge",
-  "feasibility_legend_title": "Progress",
+  "feasibility_legend_title": "Progress:",
   "orientation_guides": {
     "upper_right_label": "Fully autonomous /\nindependent from humans",
     "upper_right_color": "#6EE7B7",
@@ -12,7 +12,7 @@
   "connect_types": ["RL", "LLM"],
   "timing": {
     "intro_seconds": 1.8,
-    "axis_scan_seconds": 7.5,
+    "axis_scan_seconds": 4.5,
     "orientation_seconds": 3.2,
     "progress_legend_delay_seconds": 1.0,
     "legend_reveal_seconds": 1.1,
@@ -27,8 +27,9 @@
     "axis_color": "#B9C7D8",
     "axis_label_color": "#BBC9DB",
     "connection_opacity": 0.68,
-    "connection_stroke_width": 2.6,
-    "arrow_head_width": 0.126,
+    "connection_stroke_width": 2.9,
+    "arrow_head_width": 0.14,
+    "axis_label_line_spacing": 0.39,
     "point_label_font_size": 17,
     "orientation_label_font_size": 17,
     "orientation_region_opacity": 0.13,
@@ -140,7 +141,7 @@
       "y": 0.1,
       "fill": 1.0,
       "type": "LLM",
-      "label_offset": [0.98, -0.02],
+      "label_offset": [1.1, -0.02],
       "label_font_size": 16
     }
   ]

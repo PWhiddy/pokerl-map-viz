@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -19,6 +20,7 @@ from manim import (
     LEFT,
     Line,
     ORIGIN,
+    Paragraph,
     Polygon,
     Rectangle,
     RIGHT,
@@ -29,6 +31,7 @@ from manim import (
     Write,
     config,
 )
+from manim.scene.scene_file_writer import SceneFileWriter
 from manim.utils.rate_functions import ease_out_cubic, there_and_back
 
 
@@ -40,6 +43,26 @@ PANGO_CANVAS_REFERENCE_MULTIPLIER = 10.0
 _text_font_size_multiplier = 1.0
 
 
+def configure_all_intra_partials() -> None:
+    """Make Manim's temporary clips independently decodable frame by frame."""
+    if os.environ.get("AUTONOMY_ALL_INTRA_PARTIALS") != "1":
+        return
+
+    original_open = SceneFileWriter.open_partial_movie_stream
+
+    def open_all_intra(self, file_path=None) -> None:
+        original_open(self, file_path=file_path)
+        codec = self.video_stream.codec_context
+        codec.gop_size = 1
+        codec.max_b_frames = 0
+        codec.thread_count = 1
+
+    SceneFileWriter.open_partial_movie_stream = open_all_intra
+
+
+configure_all_intra_partials()
+
+
 def configure_text_rendering(scale_factor: float) -> None:
     """Increase Pango's shaping size while preserving displayed text size."""
     if scale_factor <= 0:
@@ -49,15 +72,15 @@ def configure_text_rendering(scale_factor: float) -> None:
     _text_font_size_multiplier = NATIVE_TEXT_MOB_SCALE_FACTOR / scale_factor
 
 
-def plot_text(text: str, *, font_size: float, **kwargs) -> Text:
-    """Create text at higher internal resolution with unchanged scene dimensions."""
+def make_text_mobject(factory, *content: str, font_size: float, **kwargs):
+    """Create a text-based mobject at higher internal resolution."""
     internal_font_size = float(font_size) * _text_font_size_multiplier
     canvas_multiplier = max(
         1.0,
         _text_font_size_multiplier / PANGO_CANVAS_REFERENCE_MULTIPLIER,
     )
     if canvas_multiplier == 1.0:
-        return Text(text, font_size=internal_font_size, **kwargs)
+        return factory(*content, font_size=internal_font_size, **kwargs)
 
     # Manim passes the output resolution to Pango as its text-layout width.
     # At 30x internal font sizes that makes long text wrap unexpectedly, so
@@ -74,11 +97,21 @@ def plot_text(text: str, *, font_size: float, **kwargs) -> Text:
         config.pixel_width = expanded_width
         config.pixel_height = expanded_height
         config.text_dir = str(expanded_text_dir)
-        return Text(text, font_size=internal_font_size, **kwargs)
+        return factory(*content, font_size=internal_font_size, **kwargs)
     finally:
         config.pixel_width = original_width
         config.pixel_height = original_height
         config.text_dir = original_text_dir
+
+
+def plot_text(text: str, *, font_size: float, **kwargs) -> Text:
+    """Create high-resolution single- or multiline Manim text."""
+    return make_text_mobject(Text, text, font_size=font_size, **kwargs)
+
+
+def plot_paragraph(*lines: str, font_size: float, **kwargs) -> Paragraph:
+    """Create high-resolution text whose lines share Pango baseline spacing."""
+    return make_text_mobject(Paragraph, *lines, font_size=font_size, **kwargs)
 
 
 def load_data() -> dict:
@@ -139,17 +172,14 @@ class AIAutonomy(Scene):
             font_size=24,
             color=axis_label_color,
         ).next_to(axes, direction=np.array([0.0, -1.0, 0.0]), buff=0.2)
-        y_label = VGroup(
-            *(
-                plot_text(
-                    line,
-                    font=font,
-                    font_size=23,
-                    color=axis_label_color,
-                )
-                for line in data["y_axis_label"].splitlines()
-            )
-        ).arrange(np.array([0.0, -1.0, 0.0]), buff=0.055)
+        y_label = plot_paragraph(
+            *data["y_axis_label"].splitlines(),
+            font=font,
+            font_size=23,
+            line_spacing=float(style.get("axis_label_line_spacing", 0.39)),
+            alignment="center",
+            color=axis_label_color,
+        )
         y_label.next_to(axes, LEFT, buff=0.3)
 
         legend_layout, legend_base, type_legend_entries = self.make_legends(
@@ -179,7 +209,6 @@ class AIAutonomy(Scene):
         self.play(
             x_scan.animate.move_to(axes.c2p(1, 0)),
             run_time=axis_scan_time,
-            rate_func=there_and_back,
         )
         self.play(FadeOut(x_scan), run_time=0.18)
 
@@ -199,7 +228,6 @@ class AIAutonomy(Scene):
         self.play(
             y_scan.animate.move_to(axes.c2p(0, 1)),
             run_time=axis_scan_time,
-            rate_func=there_and_back,
         )
         self.play(FadeOut(y_scan), run_time=0.18)
 
@@ -522,6 +550,9 @@ class AIAutonomy(Scene):
             )
             feasibility_samples.add(VGroup(marker, label).arrange(RIGHT, buff=0.08))
         feasibility_samples.arrange(RIGHT, buff=0.28)
+        reference_cap_height = feasibility_samples[0][1].get_top()[1]
+        for entry in feasibility_samples[1:]:
+            entry[1].shift(UP * (reference_cap_height - entry[1].get_top()[1]))
         feasibility_legend = VGroup(feasibility_title, feasibility_samples).arrange(
             RIGHT, buff=0.24
         )
@@ -530,7 +561,12 @@ class AIAutonomy(Scene):
         type_entries: dict[str, VGroup] = {}
         display_labels = data["style"].get("type_labels", {})
         for point_type, color in data["style"]["type_colors"].items():
-            swatch = Circle(radius=0.06, stroke_width=0, fill_color=color, fill_opacity=1)
+            swatch = Circle(
+                radius=0.078,
+                stroke_width=0,
+                fill_color=color,
+                fill_opacity=1,
+            )
             label = plot_text(
                 display_labels.get(point_type, point_type),
                 font=legend_font,
