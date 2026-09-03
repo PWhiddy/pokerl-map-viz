@@ -33,6 +33,7 @@
     "orientation_label_font_size": 17,
     "orientation_region_opacity": 0.13,
     "font": "DejaVu Sans",
+    "text_mobject_scale_factor": 0.0016666666666666668,
     "axis_scan_color": "#F8FAFC",
     "type_colors": {
       "Script": "#FB923C",

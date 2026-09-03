@@ -13,6 +13,14 @@ The x- and y-axis sweeps use `timing.axis_scan_seconds` and
 the y-axis; the lower-left orientation guide then precedes the upper-right one.
 `style.axis_label_color` independently controls the axis-label contrast.
 
+`style.text_mobject_scale_factor` applies the Manim text-rendering workaround used
+here for improved kerning on Ubuntu. Its value is `0.0016666666666666668`
+instead of Manim's native `0.05`; the scene automatically requests fonts at 30x
+size before Manim scales them down, so nominal displayed font sizes stay
+unchanged. The helper also expands Pango's temporary layout canvas to prevent
+long text from wrapping at this scale. This is local to this scene and does not
+modify the `science` Conda environment.
+
 Coordinates and `fill` must be in the range 0–1. Labels default to `name`; add an
 `label` can contain `\n` when you want a controlled line break. Point type is
 encoded only by color; edit `style.type_colors` to change the mapping. `Script`
@@ -40,7 +48,9 @@ Render the final 4K animation in the requested environment:
 
 The wrapper uses the `science` Conda environment, disables Manim's stale-frame
 cache, and decodes each rendered segment independently before concatenation to
-avoid intermittent missing-glyph artifacts at H.264 segment boundaries.
+avoid intermittent missing-glyph artifacts at H.264 segment boundaries. The
+delivery encode uses one-second keyframes and no B-frames so scrubbing and exact
+frame extraction also preserve every glyph.
 
 For a quick direct preview, run
 `conda run -n science manim --disable_caching -ql autonomy_plot.py AIAutonomy`.

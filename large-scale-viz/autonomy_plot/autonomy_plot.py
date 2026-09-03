@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import manim.mobject.text.text_mobject as text_mobject
 from manim import (
     Annulus,
     Axes,
@@ -34,6 +35,50 @@ from manim.utils.rate_functions import ease_out_cubic, there_and_back
 DATA_PATH = Path(__file__).with_name("autonomy_data.json")
 POINT_RADIUS = 0.135
 X_MARKER_RADIUS = 0.17
+NATIVE_TEXT_MOB_SCALE_FACTOR = float(text_mobject.TEXT_MOB_SCALE_FACTOR)
+PANGO_CANVAS_REFERENCE_MULTIPLIER = 10.0
+_text_font_size_multiplier = 1.0
+
+
+def configure_text_rendering(scale_factor: float) -> None:
+    """Increase Pango's shaping size while preserving displayed text size."""
+    if scale_factor <= 0:
+        raise ValueError("style.text_mobject_scale_factor must be greater than zero")
+    global _text_font_size_multiplier
+    text_mobject.TEXT_MOB_SCALE_FACTOR = scale_factor
+    _text_font_size_multiplier = NATIVE_TEXT_MOB_SCALE_FACTOR / scale_factor
+
+
+def plot_text(text: str, *, font_size: float, **kwargs) -> Text:
+    """Create text at higher internal resolution with unchanged scene dimensions."""
+    internal_font_size = float(font_size) * _text_font_size_multiplier
+    canvas_multiplier = max(
+        1.0,
+        _text_font_size_multiplier / PANGO_CANVAS_REFERENCE_MULTIPLIER,
+    )
+    if canvas_multiplier == 1.0:
+        return Text(text, font_size=internal_font_size, **kwargs)
+
+    # Manim passes the output resolution to Pango as its text-layout width.
+    # At 30x internal font sizes that makes long text wrap unexpectedly, so
+    # enlarge only Pango's temporary SVG canvas and restore the render config.
+    original_width = config.pixel_width
+    original_height = config.pixel_height
+    original_text_dir = config.text_dir
+    expanded_width = round(original_width * canvas_multiplier)
+    expanded_height = round(original_height * canvas_multiplier)
+    expanded_text_dir = config.get_dir("text_dir") / (
+        f"pango_canvas_{expanded_width}x{expanded_height}"
+    )
+    try:
+        config.pixel_width = expanded_width
+        config.pixel_height = expanded_height
+        config.text_dir = str(expanded_text_dir)
+        return Text(text, font_size=internal_font_size, **kwargs)
+    finally:
+        config.pixel_width = original_width
+        config.pixel_height = original_height
+        config.text_dir = original_text_dir
 
 
 def load_data() -> dict:
@@ -60,13 +105,14 @@ class AIAutonomy(Scene):
         style = data["style"]
         timing = data["timing"]
         config.background_color = style["background_color"]
+        configure_text_rendering(float(style.get("text_mobject_scale_factor", 0.05)))
 
         font = style["font"]
         text_color = style["text_color"]
         muted = style["muted_text_color"]
         axis_color = style["axis_color"]
         axis_label_color = style.get("axis_label_color", muted)
-        title = Text(
+        title = plot_text(
             data["title"],
             font=font,
             font_size=46,
@@ -87,7 +133,7 @@ class AIAutonomy(Scene):
             },
         ).shift(UP * 0.18)
 
-        x_label = Text(
+        x_label = plot_text(
             data["x_axis_label"],
             font=font,
             font_size=24,
@@ -95,7 +141,7 @@ class AIAutonomy(Scene):
         ).next_to(axes, direction=np.array([0.0, -1.0, 0.0]), buff=0.2)
         y_label = VGroup(
             *(
-                Text(
+                plot_text(
                     line,
                     font=font,
                     font_size=23,
@@ -289,7 +335,7 @@ class AIAutonomy(Scene):
                 fill_opacity=region_opacity,
             ).move_to((lower + upper) / 2)
             region.set_z_index(-1)
-            text = Text(
+            text = plot_text(
                 label,
                 font=font,
                 font_size=label_size,
@@ -382,7 +428,7 @@ class AIAutonomy(Scene):
         default_font_size: float,
     ) -> VGroup:
         offset = np.array([*point.get("label_offset", [0.5, 0.5]), 0.0], dtype=float)
-        label = Text(
+        label = plot_text(
             point["label"],
             font=font,
             font_size=float(point.get("label_font_size", default_font_size)),
@@ -452,7 +498,7 @@ class AIAutonomy(Scene):
     ) -> tuple[VGroup, VGroup, dict[str, VGroup]]:
         legend_font = data["style"].get("legend_font", font)
         sample_color = data["style"]["axis_color"]
-        feasibility_title = Text(
+        feasibility_title = plot_text(
             data["feasibility_legend_title"],
             font=legend_font,
             font_size=18,
@@ -467,7 +513,7 @@ class AIAutonomy(Scene):
             marker = AIAutonomy.make_circle_marker(
                 fill, ORIGIN, sample_color, radius=0.078, stroke_width=2.1
             )
-            label = Text(
+            label = plot_text(
                 label_text,
                 font=legend_font,
                 font_size=16,
@@ -485,7 +531,7 @@ class AIAutonomy(Scene):
         display_labels = data["style"].get("type_labels", {})
         for point_type, color in data["style"]["type_colors"].items():
             swatch = Circle(radius=0.06, stroke_width=0, fill_color=color, fill_opacity=1)
-            label = Text(
+            label = plot_text(
                 display_labels.get(point_type, point_type),
                 font=legend_font,
                 font_size=16,

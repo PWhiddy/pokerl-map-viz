@@ -32,7 +32,7 @@ fi
 ffmpeg_inputs=()
 concat_inputs=""
 for index in "${!clips[@]}"; do
-    ffmpeg_inputs+=(-i "${clips[$index]}")
+    ffmpeg_inputs+=(-threads 1 -i "${clips[$index]}")
     concat_inputs+="[$index:v:0]"
 done
 
@@ -42,7 +42,8 @@ ffmpeg -hide_banner -loglevel warning -y \
     "${ffmpeg_inputs[@]}" \
     -filter_complex "${concat_inputs}concat=n=${#clips[@]}:v=1:a=0[video]" \
     -map "[video]" -an \
-    -c:v libx264 -preset fast -crf 15 -pix_fmt yuv420p -movflags +faststart \
+    -c:v libx264 -preset fast -crf 15 -pix_fmt yuv420p \
+    -g 60 -keyint_min 60 -sc_threshold 0 -bf 0 -movflags +faststart \
     "$fixed_movie"
 
 mkdir -p -- "$final_dir"
