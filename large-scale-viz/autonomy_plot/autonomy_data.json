@@ -3,10 +3,19 @@
   "x_axis_label": "Independence from human effort",
   "y_axis_label": "Independence\nfrom human\nknowledge",
   "feasibility_legend_title": "Progress",
-  "type_legend_title": "Type",
+  "orientation_guides": {
+    "upper_right_label": "Fully autonomous /\nindependent from humans",
+    "upper_right_color": "#6EE7B7",
+    "lower_left_label": "Completely dependent\non humans",
+    "lower_left_color": "#FDA4AF"
+  },
   "connect_types": ["RL", "LLM"],
   "timing": {
     "intro_seconds": 1.8,
+    "axis_scan_seconds": 3.6,
+    "orientation_seconds": 3.2,
+    "progress_legend_delay_seconds": 1.0,
+    "legend_reveal_seconds": 1.1,
     "seconds_per_point": 3.0,
     "transient_fade_seconds": 0.45,
     "final_hold_seconds": 3.0
@@ -16,13 +25,25 @@
     "text_color": "#E8EEF7",
     "muted_text_color": "#9AA9BD",
     "axis_color": "#B9C7D8",
+    "axis_label_color": "#BBC9DB",
     "connection_opacity": 0.68,
+    "connection_stroke_width": 2.6,
+    "arrow_head_width": 0.126,
     "point_label_font_size": 17,
+    "orientation_label_font_size": 17,
+    "orientation_region_opacity": 0.13,
     "font": "DejaVu Sans",
+    "text_tracking": -128,
+    "axis_scan_color": "#F8FAFC",
     "type_colors": {
       "Script": "#FB923C",
       "RL": "#2DD4BF",
       "LLM": "#A78BFA"
+    },
+    "type_labels": {
+      "Script": "Script",
+      "RL": "Reinforcement Learning",
+      "LLM": "Language Model"
     }
   },
   "points": [
@@ -32,6 +53,7 @@
       "y": 0.95,
       "fill": 0.15,
       "type": "Script",
+      "introduces_progress_legend": true,
       "label_offset": [-0.18, -0.38]
     },
     {
@@ -113,7 +135,7 @@
       "label_font_size": 16
     },
     {
-      "label": "Claude Fable,\nGPT 5.6 Sol",
+      "label": "Claude Fable 5,\nGPT 5.6 Sol",
       "x": 0.8,
       "y": 0.1,
       "fill": 1.0,

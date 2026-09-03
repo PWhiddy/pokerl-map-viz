@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
+from html import escape as escape_markup
 from pathlib import Path
 
 import numpy as np
 from manim import (
     Annulus,
-    AnimationGroup,
     Axes,
     Circle,
     Create,
@@ -18,21 +18,29 @@ from manim import (
     GrowFromCenter,
     LEFT,
     Line,
+    MarkupText,
     ORIGIN,
     Polygon,
+    Rectangle,
     RIGHT,
     Scene,
-    Square,
-    Text,
     UP,
     VGroup,
     Write,
     config,
 )
-from manim.utils.rate_functions import ease_out_cubic
+from manim.utils.rate_functions import ease_out_cubic, there_and_back
 
 
 DATA_PATH = Path(__file__).with_name("autonomy_data.json")
+POINT_RADIUS = 0.135
+X_MARKER_RADIUS = 0.17
+
+
+def tracked_text(text: str, tracking: int, **kwargs) -> MarkupText:
+    """Render a fully shaped Pango text run with consistent global tracking."""
+    markup = f'<span letter_spacing="{tracking}">{escape_markup(text)}</span>'
+    return MarkupText(markup, **kwargs)
 
 
 def load_data() -> dict:
@@ -64,9 +72,12 @@ class AIAutonomy(Scene):
         text_color = style["text_color"]
         muted = style["muted_text_color"]
         axis_color = style["axis_color"]
+        axis_label_color = style.get("axis_label_color", muted)
+        text_tracking = int(style.get("text_tracking", -128))
 
-        title = Text(
+        title = tracked_text(
             data["title"],
+            tracking=text_tracking,
             font=font,
             font_size=46,
             weight="BOLD",
@@ -86,12 +97,22 @@ class AIAutonomy(Scene):
             },
         ).shift(UP * 0.18)
 
-        x_label = Text(
-            data["x_axis_label"], font=font, font_size=24, color=muted
+        x_label = tracked_text(
+            data["x_axis_label"],
+            tracking=text_tracking,
+            font=font,
+            font_size=24,
+            color=axis_label_color,
         ).next_to(axes, direction=np.array([0.0, -1.0, 0.0]), buff=0.2)
         y_label = VGroup(
             *(
-                Text(line, font=font, font_size=23, color=muted)
+                tracked_text(
+                    line,
+                    tracking=text_tracking,
+                    font=font,
+                    font_size=23,
+                    color=axis_label_color,
+                )
                 for line in data["y_axis_label"].splitlines()
             )
         ).arrange(np.array([0.0, -1.0, 0.0]), buff=0.055)
@@ -104,16 +125,68 @@ class AIAutonomy(Scene):
 
         intro_time = float(timing["intro_seconds"])
         self.play(Write(title), run_time=intro_time * 0.48)
+
+        axis_reveal_time = intro_time * 0.26
+        axis_scan_time = float(timing.get("axis_scan_seconds", 1.8))
+        scan_color = style.get("axis_scan_color", text_color)
+        x_scan = Line(
+            UP * 0.17,
+            -UP * 0.17,
+            color=scan_color,
+            stroke_width=5.0,
+        ).move_to(axes.c2p(0, 0))
+        x_scan.set_z_index(4)
         self.play(
-            AnimationGroup(
-                Create(axes),
-                FadeIn(x_label, shift=UP * 0.05),
-                FadeIn(y_label, shift=RIGHT * 0.05),
-                FadeIn(legend_base, shift=UP * 0.08),
-                lag_ratio=0.08,
-            ),
-            run_time=intro_time * 0.52,
+            Create(axes.x_axis),
+            FadeIn(x_label, shift=UP * 0.05),
+            run_time=axis_reveal_time,
         )
+        self.play(GrowFromCenter(x_scan), run_time=0.18)
+        self.play(
+            x_scan.animate.move_to(axes.c2p(1, 0)),
+            run_time=axis_scan_time,
+            rate_func=there_and_back,
+        )
+        self.play(FadeOut(x_scan), run_time=0.18)
+
+        y_scan = Line(
+            LEFT * 0.17,
+            RIGHT * 0.17,
+            color=scan_color,
+            stroke_width=5.0,
+        ).move_to(axes.c2p(0, 0))
+        y_scan.set_z_index(4)
+        self.play(
+            Create(axes.y_axis),
+            FadeIn(y_label, shift=RIGHT * 0.05),
+            run_time=axis_reveal_time,
+        )
+        self.play(GrowFromCenter(y_scan), run_time=0.18)
+        self.play(
+            y_scan.animate.move_to(axes.c2p(0, 1)),
+            run_time=axis_scan_time,
+            rate_func=there_and_back,
+        )
+        self.play(FadeOut(y_scan), run_time=0.18)
+
+        orientation_guides = self.make_orientation_guides(data, axes, font)
+        orientation_time = float(timing.get("orientation_seconds", 3.2))
+        transition_time = min(0.5, orientation_time * 0.16)
+        stagger_hold = min(0.6, orientation_time * 0.19)
+        lower_guide, upper_guide = orientation_guides
+        self.play(
+            FadeIn(lower_guide, shift=UP * 0.04),
+            run_time=transition_time,
+        )
+        self.wait(stagger_hold)
+        self.play(
+            FadeIn(upper_guide, shift=UP * 0.04),
+            run_time=transition_time,
+        )
+        self.wait(
+            max(0.0, orientation_time - 3 * transition_time - stagger_hold)
+        )
+        self.play(FadeOut(orientation_guides), run_time=transition_time)
 
         seconds_per_point = float(timing["seconds_per_point"])
         reveal_time = min(0.66, seconds_per_point * 0.24)
@@ -122,6 +195,7 @@ class AIAutonomy(Scene):
         connected_types = set(data.get("connect_types", []))
         previous_positions: dict[str, tuple[np.ndarray, dict]] = {}
         revealed_types: set[str] = set()
+        progress_legend_revealed = False
 
         for point in data["points"]:
             point_type = point["type"]
@@ -135,6 +209,7 @@ class AIAutonomy(Scene):
                 font,
                 text_color,
                 float(style.get("point_label_font_size", 17)),
+                text_tracking,
             )
 
             type_arrow = None
@@ -144,6 +219,8 @@ class AIAutonomy(Scene):
                     position,
                     color,
                     float(style["connection_opacity"]),
+                    float(style.get("connection_stroke_width", 2.6)),
+                    float(style.get("arrow_head_width", 0.126)),
                     previous_positions[point_type][1],
                     point,
                 )
@@ -174,6 +251,17 @@ class AIAutonomy(Scene):
                 FadeIn(label_group, shift=0.06 * self.offset_unit(point)),
                 run_time=label_time,
             )
+            if (
+                point.get("introduces_progress_legend", False)
+                and not progress_legend_revealed
+            ):
+                self.wait(float(timing.get("progress_legend_delay_seconds", 1.0)))
+                self.play(
+                    FadeIn(legend_base, shift=UP * 0.08),
+                    marker.animate(rate_func=there_and_back).scale(1.2),
+                    run_time=float(timing.get("legend_reveal_seconds", 0.55)),
+                )
+                progress_legend_revealed = True
             if hold_time:
                 self.wait(hold_time)
             if is_transient:
@@ -188,6 +276,60 @@ class AIAutonomy(Scene):
         self.wait(float(timing["final_hold_seconds"]))
 
     @staticmethod
+    def make_orientation_guides(data: dict, axes: Axes, font: str) -> VGroup:
+        """Create temporary shaded explanations for the two autonomy extremes."""
+        guide_data = data["orientation_guides"]
+        style = data["style"]
+        region_opacity = float(style.get("orientation_region_opacity", 0.13))
+        label_size = float(style.get("orientation_label_font_size", 17))
+
+        def guide(
+            lower_left: tuple[float, float],
+            upper_right: tuple[float, float],
+            label_position: tuple[float, float],
+            label: str,
+            color: str,
+        ) -> VGroup:
+            lower = axes.c2p(*lower_left)
+            upper = axes.c2p(*upper_right)
+            region = Rectangle(
+                width=upper[0] - lower[0],
+                height=upper[1] - lower[1],
+                stroke_width=1.4,
+                stroke_color=color,
+                stroke_opacity=0.42,
+                fill_color=color,
+                fill_opacity=region_opacity,
+            ).move_to((lower + upper) / 2)
+            region.set_z_index(-1)
+            text = tracked_text(
+                label,
+                tracking=int(style.get("text_tracking", -128)),
+                font=font,
+                font_size=label_size,
+                line_spacing=0.78,
+                color=color,
+            ).move_to(axes.c2p(*label_position))
+            text.set_z_index(1)
+            return VGroup(region, text)
+
+        lower_guide = guide(
+            (0.01, 0.01),
+            (0.48, 0.48),
+            (0.245, 0.245),
+            guide_data["lower_left_label"],
+            guide_data["lower_left_color"],
+        )
+        upper_guide = guide(
+            (0.52, 0.52),
+            (0.99, 0.99),
+            (0.755, 0.755),
+            guide_data["upper_right_label"],
+            guide_data["upper_right_color"],
+        )
+        return VGroup(lower_guide, upper_guide)
+
+    @staticmethod
     def offset_unit(point: dict) -> np.ndarray:
         offset = np.array([*point.get("label_offset", [0.5, 0.5]), 0.0], dtype=float)
         norm = np.linalg.norm(offset)
@@ -196,7 +338,7 @@ class AIAutonomy(Scene):
     @staticmethod
     def make_marker(point: dict, position: np.ndarray, color: str) -> VGroup:
         if point.get("marker", "circle").lower() == "x":
-            radius = 0.145
+            radius = X_MARKER_RADIUS
             marker = VGroup(
                 Line(LEFT * radius + UP * radius, RIGHT * radius - UP * radius),
                 Line(LEFT * radius - UP * radius, RIGHT * radius + UP * radius),
@@ -205,7 +347,7 @@ class AIAutonomy(Scene):
             return marker.move_to(position)
 
         return AIAutonomy.make_circle_marker(
-            float(point["fill"]), position, color, radius=0.115, stroke_width=3.1
+            float(point["fill"]), position, color, radius=POINT_RADIUS, stroke_width=3.2
         )
 
     @staticmethod
@@ -252,10 +394,12 @@ class AIAutonomy(Scene):
         font: str,
         text_color: str,
         default_font_size: float,
+        text_tracking: int,
     ) -> VGroup:
         offset = np.array([*point.get("label_offset", [0.5, 0.5]), 0.0], dtype=float)
-        label = Text(
+        label = tracked_text(
             point["label"],
+            tracking=text_tracking,
             font=font,
             font_size=float(point.get("label_font_size", default_font_size)),
             line_spacing=float(point.get("label_line_spacing", 0.76)),
@@ -272,6 +416,8 @@ class AIAutonomy(Scene):
         end: np.ndarray,
         color: str,
         opacity: float,
+        stroke_width: float,
+        head_width: float,
         start_point: dict,
         end_point: dict,
     ) -> VGroup:
@@ -286,7 +432,7 @@ class AIAutonomy(Scene):
         start_clearance = AIAutonomy.marker_clearance(start_point, direction)
         end_clearance = AIAutonomy.marker_clearance(end_point, direction)
         head_length = 0.11
-        head_half_width = 0.055
+        head_half_width = head_width / 2
 
         shaft_start = start + direction * start_clearance
         tip = end - direction * end_clearance
@@ -295,7 +441,7 @@ class AIAutonomy(Scene):
             shaft_start,
             head_base,
             color=color,
-            stroke_width=2.2,
+            stroke_width=stroke_width,
             stroke_opacity=opacity,
         )
         head = Polygon(
@@ -312,17 +458,24 @@ class AIAutonomy(Scene):
     def marker_clearance(point: dict, direction: np.ndarray) -> float:
         """Distance from marker center to its outer edge along an arrow."""
         if point.get("marker", "circle").lower() == "x":
-            cross_radius = 0.145
+            cross_radius = X_MARKER_RADIUS
             return cross_radius * (abs(direction[0]) + abs(direction[1]))
-        return 0.115
+        return POINT_RADIUS
 
     @staticmethod
     def make_legends(
         data: dict, font: str, text_color: str, muted: str
     ) -> tuple[VGroup, VGroup, dict[str, VGroup]]:
+        legend_font = data["style"].get("legend_font", font)
         sample_color = data["style"]["axis_color"]
-        feasibility_title = Text(
-            data["feasibility_legend_title"], font=font, font_size=18, color=muted
+        text_tracking = int(data["style"].get("text_tracking", -128))
+        feasibility_title = tracked_text(
+            data["feasibility_legend_title"],
+            tracking=text_tracking,
+            font=legend_font,
+            font_size=18,
+            color=muted,
+            disable_ligatures=False,
         )
         feasibility_samples = VGroup()
         for fill, label_text in (
@@ -332,27 +485,40 @@ class AIAutonomy(Scene):
             marker = AIAutonomy.make_circle_marker(
                 fill, ORIGIN, sample_color, radius=0.078, stroke_width=2.1
             )
-            label = Text(label_text, font=font, font_size=16, color=text_color)
-            feasibility_samples.add(VGroup(marker, label).arrange(RIGHT, buff=0.11))
-        feasibility_samples.arrange(RIGHT, buff=0.42)
+            label = tracked_text(
+                label_text,
+                tracking=text_tracking,
+                font=legend_font,
+                font_size=16,
+                color=text_color,
+                disable_ligatures=False,
+            )
+            feasibility_samples.add(VGroup(marker, label).arrange(RIGHT, buff=0.08))
+        feasibility_samples.arrange(RIGHT, buff=0.28)
         feasibility_legend = VGroup(feasibility_title, feasibility_samples).arrange(
-            RIGHT, buff=0.34
+            RIGHT, buff=0.24
         )
 
-        type_title = Text(data["type_legend_title"], font=font, font_size=18, color=muted)
         type_samples = VGroup()
         type_entries: dict[str, VGroup] = {}
+        display_labels = data["style"].get("type_labels", {})
         for point_type, color in data["style"]["type_colors"].items():
-            swatch = Square(side_length=0.12, stroke_width=0, fill_color=color, fill_opacity=1)
-            label = Text(point_type, font=font, font_size=16, color=text_color)
-            entry = VGroup(swatch, label).arrange(RIGHT, buff=0.1)
+            swatch = Circle(radius=0.06, stroke_width=0, fill_color=color, fill_opacity=1)
+            label = tracked_text(
+                display_labels.get(point_type, point_type),
+                tracking=text_tracking,
+                font=legend_font,
+                font_size=16,
+                color=text_color,
+                disable_ligatures=False,
+            )
+            entry = VGroup(swatch, label).arrange(RIGHT, buff=0.08)
             type_entries[point_type] = entry
             type_samples.add(entry)
-        type_samples.arrange(RIGHT, buff=0.38)
-        type_legend = VGroup(type_title, type_samples).arrange(RIGHT, buff=0.34)
+        type_samples.arrange(RIGHT, buff=0.24)
 
-        legend_layout = VGroup(feasibility_legend, type_legend).arrange(
+        legend_layout = VGroup(feasibility_legend, type_samples).arrange(
             np.array([0.0, -1.0, 0.0]), buff=0.14
         )
-        legend_base = VGroup(feasibility_legend, type_title)
+        legend_base = VGroup(feasibility_legend)
         return legend_layout, legend_base, type_entries
