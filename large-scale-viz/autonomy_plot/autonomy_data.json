@@ -12,7 +12,7 @@
   "connect_types": ["RL", "LLM"],
   "timing": {
     "intro_seconds": 1.8,
-    "axis_scan_seconds": 3.6,
+    "axis_scan_seconds": 7.5,
     "orientation_seconds": 3.2,
     "progress_legend_delay_seconds": 1.0,
     "legend_reveal_seconds": 1.1,
@@ -33,7 +33,6 @@
     "orientation_label_font_size": 17,
     "orientation_region_opacity": 0.13,
     "font": "DejaVu Sans",
-    "text_tracking": -128,
     "axis_scan_color": "#F8FAFC",
     "type_colors": {
       "Script": "#FB923C",

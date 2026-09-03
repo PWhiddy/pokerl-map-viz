@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from html import escape as escape_markup
 from pathlib import Path
 
 import numpy as np
@@ -18,12 +17,12 @@ from manim import (
     GrowFromCenter,
     LEFT,
     Line,
-    MarkupText,
     ORIGIN,
     Polygon,
     Rectangle,
     RIGHT,
     Scene,
+    Text,
     UP,
     VGroup,
     Write,
@@ -35,12 +34,6 @@ from manim.utils.rate_functions import ease_out_cubic, there_and_back
 DATA_PATH = Path(__file__).with_name("autonomy_data.json")
 POINT_RADIUS = 0.135
 X_MARKER_RADIUS = 0.17
-
-
-def tracked_text(text: str, tracking: int, **kwargs) -> MarkupText:
-    """Render a fully shaped Pango text run with consistent global tracking."""
-    markup = f'<span letter_spacing="{tracking}">{escape_markup(text)}</span>'
-    return MarkupText(markup, **kwargs)
 
 
 def load_data() -> dict:
@@ -73,11 +66,8 @@ class AIAutonomy(Scene):
         muted = style["muted_text_color"]
         axis_color = style["axis_color"]
         axis_label_color = style.get("axis_label_color", muted)
-        text_tracking = int(style.get("text_tracking", -128))
-
-        title = tracked_text(
+        title = Text(
             data["title"],
-            tracking=text_tracking,
             font=font,
             font_size=46,
             weight="BOLD",
@@ -97,18 +87,16 @@ class AIAutonomy(Scene):
             },
         ).shift(UP * 0.18)
 
-        x_label = tracked_text(
+        x_label = Text(
             data["x_axis_label"],
-            tracking=text_tracking,
             font=font,
             font_size=24,
             color=axis_label_color,
         ).next_to(axes, direction=np.array([0.0, -1.0, 0.0]), buff=0.2)
         y_label = VGroup(
             *(
-                tracked_text(
+                Text(
                     line,
-                    tracking=text_tracking,
                     font=font,
                     font_size=23,
                     color=axis_label_color,
@@ -209,7 +197,6 @@ class AIAutonomy(Scene):
                 font,
                 text_color,
                 float(style.get("point_label_font_size", 17)),
-                text_tracking,
             )
 
             type_arrow = None
@@ -302,9 +289,8 @@ class AIAutonomy(Scene):
                 fill_opacity=region_opacity,
             ).move_to((lower + upper) / 2)
             region.set_z_index(-1)
-            text = tracked_text(
+            text = Text(
                 label,
-                tracking=int(style.get("text_tracking", -128)),
                 font=font,
                 font_size=label_size,
                 line_spacing=0.78,
@@ -394,12 +380,10 @@ class AIAutonomy(Scene):
         font: str,
         text_color: str,
         default_font_size: float,
-        text_tracking: int,
     ) -> VGroup:
         offset = np.array([*point.get("label_offset", [0.5, 0.5]), 0.0], dtype=float)
-        label = tracked_text(
+        label = Text(
             point["label"],
-            tracking=text_tracking,
             font=font,
             font_size=float(point.get("label_font_size", default_font_size)),
             line_spacing=float(point.get("label_line_spacing", 0.76)),
@@ -468,10 +452,8 @@ class AIAutonomy(Scene):
     ) -> tuple[VGroup, VGroup, dict[str, VGroup]]:
         legend_font = data["style"].get("legend_font", font)
         sample_color = data["style"]["axis_color"]
-        text_tracking = int(data["style"].get("text_tracking", -128))
-        feasibility_title = tracked_text(
+        feasibility_title = Text(
             data["feasibility_legend_title"],
-            tracking=text_tracking,
             font=legend_font,
             font_size=18,
             color=muted,
@@ -485,9 +467,8 @@ class AIAutonomy(Scene):
             marker = AIAutonomy.make_circle_marker(
                 fill, ORIGIN, sample_color, radius=0.078, stroke_width=2.1
             )
-            label = tracked_text(
+            label = Text(
                 label_text,
-                tracking=text_tracking,
                 font=legend_font,
                 font_size=16,
                 color=text_color,
@@ -504,9 +485,8 @@ class AIAutonomy(Scene):
         display_labels = data["style"].get("type_labels", {})
         for point_type, color in data["style"]["type_colors"].items():
             swatch = Circle(radius=0.06, stroke_width=0, fill_color=color, fill_opacity=1)
-            label = tracked_text(
+            label = Text(
                 display_labels.get(point_type, point_type),
-                tracking=text_tracking,
                 font=legend_font,
                 font_size=16,
                 color=text_color,
