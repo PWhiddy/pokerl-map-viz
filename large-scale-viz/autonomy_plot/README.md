@@ -13,7 +13,9 @@ The x- and y-axis sweeps use `timing.axis_scan_seconds` and
 the y-axis. Each marker makes one end-to-end pass. The lower-left orientation
 guide then precedes the upper-right one.
 `style.axis_label_color` independently controls the axis-label contrast, and
-`style.axis_label_line_spacing` sets the y-axis label's baseline spacing.
+`style.axis_label_line_spacing` sets the y-axis label's baseline spacing. The
+`axis_x_label_buff`, `axis_y_label_buff`, and `axis_corner_size` style values
+control label clearance and the filled lower-left axis joint.
 
 `style.text_mobject_scale_factor` applies the Manim text-rendering workaround used
 here for improved kerning on Ubuntu. Its value is `0.0016666666666666668`
@@ -41,6 +43,11 @@ the colored ring covers exactly the area proportion specified by `fill` (for
 example, `0.15` colors 15% of the disk area). Types listed in `connect_types`
 receive animated arrows in data order. Their body and head weights are controlled
 by `style.connection_stroke_width` and `style.arrow_head_width`.
+Both legend rows use `style.legend_marker_radius`, `style.legend_font_size`, and
+the small optical correction `style.legend_marker_y_nudge`. The orientation
+regions use layered rounded rectangles; their
+corner and feathering are controlled by `orientation_corner_radius`,
+`orientation_feather_width`, and `orientation_feather_layers`.
 
 Render the final 4K animation in the requested environment:
 

@@ -24,6 +24,7 @@ from manim import (
     Polygon,
     Rectangle,
     RIGHT,
+    RoundedRectangle,
     Scene,
     Text,
     UP,
@@ -32,7 +33,7 @@ from manim import (
     config,
 )
 from manim.scene.scene_file_writer import SceneFileWriter
-from manim.utils.rate_functions import ease_out_cubic, there_and_back
+from manim.utils.rate_functions import ease_in_out_sine, ease_out_cubic, there_and_back
 
 
 DATA_PATH = Path(__file__).with_name("autonomy_data.json")
@@ -171,7 +172,11 @@ class AIAutonomy(Scene):
             font=font,
             font_size=24,
             color=axis_label_color,
-        ).next_to(axes, direction=np.array([0.0, -1.0, 0.0]), buff=0.2)
+        ).next_to(
+            axes,
+            direction=np.array([0.0, -1.0, 0.0]),
+            buff=float(style.get("axis_x_label_buff", 0.24)),
+        )
         y_label = plot_paragraph(
             *data["y_axis_label"].splitlines(),
             font=font,
@@ -180,7 +185,21 @@ class AIAutonomy(Scene):
             alignment="center",
             color=axis_label_color,
         )
-        y_label.next_to(axes, LEFT, buff=0.3)
+        y_label.next_to(
+            axes,
+            LEFT,
+            buff=float(style.get("axis_y_label_buff", 0.34)),
+        )
+
+        corner_size = float(style.get("axis_corner_size", 0.02))
+        axis_corner = Rectangle(
+            width=corner_size,
+            height=corner_size,
+            stroke_width=0,
+            fill_color=axis_color,
+            fill_opacity=1.0,
+        ).move_to(axes.c2p(0, 0))
+        axis_corner.set_z_index(2)
 
         legend_layout, legend_base, type_legend_entries = self.make_legends(
             data, font, text_color, muted
@@ -209,6 +228,7 @@ class AIAutonomy(Scene):
         self.play(
             x_scan.animate.move_to(axes.c2p(1, 0)),
             run_time=axis_scan_time,
+            rate_func=ease_in_out_sine,
         )
         self.play(FadeOut(x_scan), run_time=0.18)
 
@@ -222,12 +242,14 @@ class AIAutonomy(Scene):
         self.play(
             Create(axes.y_axis),
             FadeIn(y_label, shift=RIGHT * 0.05),
+            FadeIn(axis_corner),
             run_time=axis_reveal_time,
         )
         self.play(GrowFromCenter(y_scan), run_time=0.18)
         self.play(
             y_scan.animate.move_to(axes.c2p(0, 1)),
             run_time=axis_scan_time,
+            rate_func=ease_in_out_sine,
         )
         self.play(FadeOut(y_scan), run_time=0.18)
 
@@ -342,6 +364,9 @@ class AIAutonomy(Scene):
         guide_data = data["orientation_guides"]
         style = data["style"]
         region_opacity = float(style.get("orientation_region_opacity", 0.13))
+        corner_radius = float(style.get("orientation_corner_radius", 0.18))
+        feather_width = float(style.get("orientation_feather_width", 0.22))
+        feather_layers = max(2, int(style.get("orientation_feather_layers", 18)))
         label_size = float(style.get("orientation_label_font_size", 17))
 
         def guide(
@@ -353,15 +378,22 @@ class AIAutonomy(Scene):
         ) -> VGroup:
             lower = axes.c2p(*lower_left)
             upper = axes.c2p(*upper_right)
-            region = Rectangle(
-                width=upper[0] - lower[0],
-                height=upper[1] - lower[1],
-                stroke_width=1.4,
-                stroke_color=color,
-                stroke_opacity=0.42,
-                fill_color=color,
-                fill_opacity=region_opacity,
-            ).move_to((lower + upper) / 2)
+            width = upper[0] - lower[0]
+            height = upper[1] - lower[1]
+            usable_feather = min(feather_width, width * 0.24, height * 0.24)
+            layer_opacity = 1.0 - (1.0 - region_opacity) ** (1.0 / feather_layers)
+            region = VGroup()
+            for layer_index in range(feather_layers):
+                inset = usable_feather * layer_index / (feather_layers - 1)
+                layer = RoundedRectangle(
+                    width=width - 2 * inset,
+                    height=height - 2 * inset,
+                    corner_radius=max(0.06, corner_radius - inset * 0.45),
+                    stroke_width=0,
+                    fill_color=color,
+                    fill_opacity=layer_opacity,
+                ).move_to((lower + upper) / 2)
+                region.add(layer)
             region.set_z_index(-1)
             text = plot_text(
                 label,
@@ -524,8 +556,33 @@ class AIAutonomy(Scene):
     def make_legends(
         data: dict, font: str, text_color: str, muted: str
     ) -> tuple[VGroup, VGroup, dict[str, VGroup]]:
-        legend_font = data["style"].get("legend_font", font)
-        sample_color = data["style"]["axis_color"]
+        style = data["style"]
+        legend_font = style.get("legend_font", font)
+        legend_font_size = float(style.get("legend_font_size", 17))
+        sample_color = style["axis_color"]
+        marker_radius = float(style.get("legend_marker_radius", POINT_RADIUS))
+        marker_y_nudge = float(style.get("legend_marker_y_nudge", 0.0))
+        cap_reference = plot_text(
+            "H",
+            font=legend_font,
+            font_size=legend_font_size,
+            color=text_color,
+            disable_ligatures=False,
+        )
+        cap_height = cap_reference.height
+
+        def legend_entry(marker: VGroup, label: Text) -> VGroup:
+            entry = VGroup(marker, label).arrange(RIGHT, buff=0.08)
+            marker.set_y(
+                label.get_top()[1] - cap_height / 2 + marker_y_nudge
+            )
+            return entry
+
+        def align_entry_row(entries: VGroup) -> None:
+            reference_cap_top = entries[0][1].get_top()[1]
+            for entry in entries[1:]:
+                entry.shift(UP * (reference_cap_top - entry[1].get_top()[1]))
+
         feasibility_title = plot_text(
             data["feasibility_legend_title"],
             font=legend_font,
@@ -539,45 +596,49 @@ class AIAutonomy(Scene):
             (1.0, "Finishes the game"),
         ):
             marker = AIAutonomy.make_circle_marker(
-                fill, ORIGIN, sample_color, radius=0.078, stroke_width=2.1
+                fill,
+                ORIGIN,
+                sample_color,
+                radius=marker_radius,
+                stroke_width=3.2,
             )
             label = plot_text(
                 label_text,
                 font=legend_font,
-                font_size=16,
+                font_size=legend_font_size,
                 color=text_color,
                 disable_ligatures=False,
             )
-            feasibility_samples.add(VGroup(marker, label).arrange(RIGHT, buff=0.08))
+            feasibility_samples.add(legend_entry(marker, label))
         feasibility_samples.arrange(RIGHT, buff=0.28)
-        reference_cap_height = feasibility_samples[0][1].get_top()[1]
-        for entry in feasibility_samples[1:]:
-            entry[1].shift(UP * (reference_cap_height - entry[1].get_top()[1]))
+        align_entry_row(feasibility_samples)
         feasibility_legend = VGroup(feasibility_title, feasibility_samples).arrange(
             RIGHT, buff=0.24
         )
 
         type_samples = VGroup()
         type_entries: dict[str, VGroup] = {}
-        display_labels = data["style"].get("type_labels", {})
-        for point_type, color in data["style"]["type_colors"].items():
-            swatch = Circle(
-                radius=0.078,
-                stroke_width=0,
-                fill_color=color,
-                fill_opacity=1,
+        display_labels = style.get("type_labels", {})
+        for point_type, color in style["type_colors"].items():
+            swatch = AIAutonomy.make_circle_marker(
+                1.0,
+                ORIGIN,
+                color,
+                radius=marker_radius,
+                stroke_width=3.2,
             )
             label = plot_text(
                 display_labels.get(point_type, point_type),
                 font=legend_font,
-                font_size=16,
+                font_size=legend_font_size,
                 color=text_color,
                 disable_ligatures=False,
             )
-            entry = VGroup(swatch, label).arrange(RIGHT, buff=0.08)
+            entry = legend_entry(swatch, label)
             type_entries[point_type] = entry
             type_samples.add(entry)
         type_samples.arrange(RIGHT, buff=0.24)
+        align_entry_row(type_samples)
 
         legend_layout = VGroup(feasibility_legend, type_samples).arrange(
             np.array([0.0, -1.0, 0.0]), buff=0.14
