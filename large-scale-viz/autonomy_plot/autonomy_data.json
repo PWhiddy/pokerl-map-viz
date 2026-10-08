@@ -1,10 +1,10 @@
 {
-  "title": "Types of Autonomy",
+  "title": "AI Autonomy",
   "x_axis_label": "Independence from human effort",
   "y_axis_label": "Independence\nfrom human\nknowledge",
   "feasibility_legend_title": "Progress:",
   "orientation_guides": {
-    "upper_right_label": "Fully autonomous /\nindependent from humans",
+    "upper_right_label": "Completely independent\n from humans",
     "upper_right_color": "#6EE7B7",
     "lower_left_label": "Completely dependent\non humans",
     "lower_left_color": "#FDA4AF"
@@ -12,7 +12,7 @@
   "connect_types": ["RL", "LLM"],
   "timing": {
     "intro_seconds": 1.8,
-    "axis_scan_seconds": 4.5,
+    "axis_scan_seconds": 3.6,
     "orientation_seconds": 3.2,
     "progress_legend_delay_seconds": 1.0,
     "legend_reveal_seconds": 1.1,
@@ -44,6 +44,7 @@
     "legend_font_size": 17,
     "font": "DejaVu Sans",
     "text_mobject_scale_factor": 0.0016666666666666668,
+    "text_tracking": 0.0035,
     "axis_scan_color": "#F8FAFC",
     "type_colors": {
       "Script": "#FB923C",
@@ -83,7 +84,7 @@
       "label_offset": [0.25, 0.42]
     },
     {
-      "label": "Basic rewards",
+      "label": "Simple rewards",
       "x": 0.3,
       "y": 0.7,
       "fill": 0.3,
@@ -99,7 +100,7 @@
       "label_offset": [0.4, 0.58]
     },
     {
-      "label": "Improved Obs\n+ Rewards",
+      "label": "Refined Obs\n+ Rewards",
       "x": "0.2",
       "y": "0.7",
       "fill": "0.5",
@@ -145,7 +146,7 @@
       "label_font_size": 16
     },
     {
-      "label": "Claude Fable 5,\nGPT 5.6 Sol",
+      "label": "Claude Fable 5+,\nGPT 5.6 Sol+",
       "x": 0.8,
       "y": 0.1,
       "fill": 1.0,

@@ -42,6 +42,7 @@ X_MARKER_RADIUS = 0.17
 NATIVE_TEXT_MOB_SCALE_FACTOR = float(text_mobject.TEXT_MOB_SCALE_FACTOR)
 PANGO_CANVAS_REFERENCE_MULTIPLIER = 10.0
 _text_font_size_multiplier = 1.0
+_text_tracking = 0.0
 
 
 def configure_all_intra_partials() -> None:
@@ -64,13 +65,52 @@ def configure_all_intra_partials() -> None:
 configure_all_intra_partials()
 
 
-def configure_text_rendering(scale_factor: float) -> None:
-    """Increase Pango's shaping size while preserving displayed text size."""
+def configure_text_rendering(scale_factor: float, tracking: float = 0.0) -> None:
+    """Configure high-resolution shaping and a small scene-wide tracking value."""
     if scale_factor <= 0:
         raise ValueError("style.text_mobject_scale_factor must be greater than zero")
-    global _text_font_size_multiplier
+    if tracking < 0:
+        raise ValueError("style.text_tracking must not be negative")
+    global _text_font_size_multiplier, _text_tracking
     text_mobject.TEXT_MOB_SCALE_FACTOR = scale_factor
     _text_font_size_multiplier = NATIVE_TEXT_MOB_SCALE_FACTOR / scale_factor
+    _text_tracking = tracking
+
+
+def add_text_tracking(mobject, lines: tuple[str, ...]) -> None:
+    """Increase inter-character spacing without stretching the glyph outlines."""
+    if _text_tracking == 0:
+        return
+
+    if isinstance(mobject, Paragraph):
+        glyph_lines = [list(line) for line in mobject.chars]
+    else:
+        all_glyphs = list(mobject.chars)
+        glyph_lines = []
+        glyph_index = 0
+        for line in lines:
+            visible_count = sum(not char.isspace() for char in line)
+            glyph_lines.append(all_glyphs[glyph_index : glyph_index + visible_count])
+            glyph_index += visible_count
+        if glyph_index != len(all_glyphs):
+            # This fallback covers fonts that combine multiple code points into
+            # one glyph. Current plot text follows the exact path above.
+            glyph_lines = [all_glyphs]
+            lines = ("".join(lines),)
+
+    for line, glyphs in zip(lines, glyph_lines):
+        if len(glyphs) < 2:
+            continue
+        character_slots = [
+            index for index, char in enumerate(line) if not char.isspace()
+        ]
+        if len(character_slots) != len(glyphs):
+            character_slots = list(range(len(glyphs)))
+        original_center = VGroup(*glyphs).get_center().copy()
+        slot_center = (len(line) - 1) / 2
+        for glyph, slot in zip(glyphs, character_slots):
+            glyph.shift(RIGHT * _text_tracking * (slot - slot_center))
+        VGroup(*glyphs).move_to(original_center)
 
 
 def make_text_mobject(factory, *content: str, font_size: float, **kwargs):
@@ -81,7 +121,10 @@ def make_text_mobject(factory, *content: str, font_size: float, **kwargs):
         _text_font_size_multiplier / PANGO_CANVAS_REFERENCE_MULTIPLIER,
     )
     if canvas_multiplier == 1.0:
-        return factory(*content, font_size=internal_font_size, **kwargs)
+        mobject = factory(*content, font_size=internal_font_size, **kwargs)
+        lines = tuple(content) if factory is Paragraph else tuple(content[0].splitlines())
+        add_text_tracking(mobject, lines)
+        return mobject
 
     # Manim passes the output resolution to Pango as its text-layout width.
     # At 30x internal font sizes that makes long text wrap unexpectedly, so
@@ -98,11 +141,14 @@ def make_text_mobject(factory, *content: str, font_size: float, **kwargs):
         config.pixel_width = expanded_width
         config.pixel_height = expanded_height
         config.text_dir = str(expanded_text_dir)
-        return factory(*content, font_size=internal_font_size, **kwargs)
+        mobject = factory(*content, font_size=internal_font_size, **kwargs)
     finally:
         config.pixel_width = original_width
         config.pixel_height = original_height
         config.text_dir = original_text_dir
+    lines = tuple(content) if factory is Paragraph else tuple(content[0].splitlines())
+    add_text_tracking(mobject, lines)
+    return mobject
 
 
 def plot_text(text: str, *, font_size: float, **kwargs) -> Text:
@@ -139,7 +185,10 @@ class AIAutonomy(Scene):
         style = data["style"]
         timing = data["timing"]
         config.background_color = style["background_color"]
-        configure_text_rendering(float(style.get("text_mobject_scale_factor", 0.05)))
+        configure_text_rendering(
+            float(style.get("text_mobject_scale_factor", 0.05)),
+            float(style.get("text_tracking", 0.0)),
+        )
 
         font = style["font"]
         text_color = style["text_color"]
